@@ -1,0 +1,40 @@
+/* Light appearance, always loaded. */
+
+.tool-palette {
+    -fx-padding: 4;
+    -fx-spacing: 2;
+}
+
+.tool-button {
+    -fx-padding: 3 6 3 6;
+    -fx-graphic-text-gap: 8;
+}
+
+.diagram-outside {
+    -fx-background-color: #b8b8b8;
+}
+
+.welcome-title {
+    -fx-font-size: 26px;
+    -fx-font-weight: bold;
+}
+
+.welcome-pane {
+    -fx-padding: 40;
+}
+
+.notification {
+    -fx-text-fill: white;
+    -fx-padding: 8 14 8 14;
+    -fx-background-radius: 6;
+    -fx-font-weight: bold;
+    -fx-effect: dropshadow(gaussian, rgba(0, 0, 0, 0.35), 6, 0, 0, 2);
+}
+
+.notification-error {
+    -fx-background-color: #c62828;
+}
+
+.notification-confirmation {
+    -fx-background-color: #2e7d32;
+}

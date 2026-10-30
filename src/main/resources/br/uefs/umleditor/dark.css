@@ -1,0 +1,19 @@
+/* Dark appearance, loaded on top of base.css when View > Dark Mode is active (RF40). */
+
+.root {
+    -fx-base: #3a3d42;
+    -fx-background: #2b2d31;
+    -fx-control-inner-background: #33363b;
+    -fx-accent: #4a7fc1;
+    -fx-focus-color: #4a7fc1;
+    -fx-text-base-color: #e0e0e0;
+    -fx-text-background-color: #e0e0e0;
+}
+
+.diagram-outside {
+    -fx-background-color: #1e1f22;
+}
+
+.menu-bar {
+    -fx-background-color: #2b2d31;
+}
