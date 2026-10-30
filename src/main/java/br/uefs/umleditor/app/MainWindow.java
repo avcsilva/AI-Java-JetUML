@@ -4,11 +4,14 @@ import java.util.Optional;
 
 import br.uefs.umleditor.model.Diagram;
 import br.uefs.umleditor.model.DiagramType;
+import br.uefs.umleditor.render.FontSettings;
+import br.uefs.umleditor.render.RenderContext;
 import br.uefs.umleditor.render.Theme;
 import br.uefs.umleditor.ui.DiagramCanvas;
 import br.uefs.umleditor.ui.DiagramTab;
 import br.uefs.umleditor.ui.NotificationArea;
 import br.uefs.umleditor.ui.dialogs.DiagramSizeDialog;
+import br.uefs.umleditor.ui.dialogs.FontDialog;
 import br.uefs.umleditor.ui.dialogs.NotificationDurationDialog;
 import javafx.application.Platform;
 import javafx.beans.property.BooleanProperty;
@@ -73,6 +76,8 @@ public class MainWindow {
                 tab -> tab.getToolPalette().setShowToolHint(preferences.showToolHintProperty().get())));
         preferences.verboseTooltipsProperty().addListener(observable -> forEachDiagramTab(
                 tab -> tab.getToolPalette().setVerboseTooltips(preferences.verboseTooltipsProperty().get())));
+        preferences.fontSettingsProperty().addListener(observable -> forEachDiagramTab(
+                tab -> tab.setFontSettings(preferences.fontSettingsProperty().get())));
 
         stage.setTitle("UML Editor");
         stage.setScene(scene);
@@ -84,7 +89,7 @@ public class MainWindow {
     }
 
     private MenuBar createMenuBar() {
-        return new MenuBar(createFileMenu(), createViewMenu());
+        return new MenuBar(createFileMenu(), createEditMenu(), createViewMenu());
     }
 
     private Menu createFileMenu() {
@@ -98,6 +103,16 @@ public class MainWindow {
         exit.setAccelerator(new KeyCodeCombination(KeyCode.Q, KeyCombination.SHORTCUT_DOWN));
         exit.setOnAction(event -> Platform.exit());
         return new Menu("File", null, newMenu, new SeparatorMenuItem(), exit);
+    }
+
+    private Menu createEditMenu() {
+        MenuItem selectAll = new MenuItem("Select All");
+        selectAll.setAccelerator(new KeyCodeCombination(KeyCode.A, KeyCombination.SHORTCUT_DOWN));
+        selectAll.setOnAction(event -> currentDiagramTab().ifPresent(DiagramTab::selectAll));
+        MenuItem delete = new MenuItem("Delete");
+        delete.setAccelerator(new KeyCodeCombination(KeyCode.DELETE));
+        delete.setOnAction(event -> currentDiagramTab().ifPresent(DiagramTab::deleteSelection));
+        return new Menu("Edit", null, selectAll, delete);
     }
 
     private Menu createViewMenu() {
@@ -117,13 +132,15 @@ public class MainWindow {
 
         MenuItem diagramSize = new MenuItem("Set Diagram Size...");
         diagramSize.setOnAction(event -> editDiagramSize());
+        MenuItem changeFont = new MenuItem("Change Font...");
+        changeFont.setOnAction(event -> editFont());
         CheckMenuItem darkMode = checkItem("Dark Mode", preferences.darkModeProperty());
         MenuItem notificationDuration = new MenuItem("Notification Duration...");
         notificationDuration.setOnAction(event -> editNotificationDuration());
 
         return new Menu("View", null, showGrid, showToolHint, verboseTooltips, new SeparatorMenuItem(),
                 zoomInItem, zoomOutItem, resetZoomItem, new SeparatorMenuItem(),
-                diagramSize, darkMode, notificationDuration);
+                diagramSize, changeFont, darkMode, notificationDuration);
     }
 
     private static CheckMenuItem checkItem(String text, BooleanProperty setting) {
@@ -137,7 +154,8 @@ public class MainWindow {
      */
     public void newDiagram(DiagramType type) {
         Diagram diagram = new Diagram(type, preferences.getDiagramWidth(), preferences.getDiagramHeight());
-        DiagramTab tab = new DiagramTab(diagram, type.getDisplayName(), currentTheme(),
+        RenderContext renderContext = new RenderContext(currentTheme(), preferences.fontSettingsProperty().get());
+        DiagramTab tab = new DiagramTab(diagram, type.getDisplayName(), renderContext,
                 preferences.showGridProperty().get());
         tab.getToolPalette().setShowToolHint(preferences.showToolHintProperty().get());
         tab.getToolPalette().setVerboseTooltips(preferences.verboseTooltipsProperty().get());
@@ -189,6 +207,14 @@ public class MainWindow {
             preferences.setDiagramSize((int) size.getWidth(), (int) size.getHeight());
             notificationArea.showConfirmation("Diagram size set to " + preferences.getDiagramWidth() + " x "
                     + preferences.getDiagramHeight() + " pixels");
+        });
+    }
+
+    private void editFont() {
+        FontDialog dialog = new FontDialog(preferences.fontSettingsProperty().get(), FontSettings.defaults());
+        prepare(dialog).showAndWait().ifPresent(font -> {
+            preferences.fontSettingsProperty().set(font);
+            notificationArea.showConfirmation("Font set to " + font.family() + " " + (int) font.size());
         });
     }
 

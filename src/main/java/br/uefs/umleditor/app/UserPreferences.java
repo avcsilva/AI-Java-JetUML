@@ -3,10 +3,13 @@ package br.uefs.umleditor.app;
 import java.util.prefs.Preferences;
 
 import br.uefs.umleditor.model.Diagram;
+import br.uefs.umleditor.render.FontSettings;
 import javafx.beans.property.BooleanProperty;
 import javafx.beans.property.IntegerProperty;
+import javafx.beans.property.ObjectProperty;
 import javafx.beans.property.SimpleBooleanProperty;
 import javafx.beans.property.SimpleIntegerProperty;
+import javafx.beans.property.SimpleObjectProperty;
 import javafx.geometry.Rectangle2D;
 import javafx.stage.Screen;
 
@@ -25,6 +28,8 @@ public class UserPreferences {
     private static final String NOTIFICATION_DURATION = "notificationDuration";
     private static final String DIAGRAM_WIDTH = "diagramWidth";
     private static final String DIAGRAM_HEIGHT = "diagramHeight";
+    private static final String FONT_FAMILY = "fontFamily";
+    private static final String FONT_SIZE = "fontSize";
 
     private final Preferences store = Preferences.userNodeForPackage(UserPreferences.class);
 
@@ -34,6 +39,7 @@ public class UserPreferences {
     private final BooleanProperty darkMode = booleanSetting(DARK_MODE, false);
     private final IntegerProperty notificationDuration =
             integerSetting(NOTIFICATION_DURATION, DEFAULT_NOTIFICATION_DURATION);
+    private final ObjectProperty<FontSettings> fontSettings = fontSetting();
 
     private BooleanProperty booleanSetting(String key, boolean defaultValue) {
         BooleanProperty property = new SimpleBooleanProperty(store.getBoolean(key, defaultValue));
@@ -44,6 +50,17 @@ public class UserPreferences {
     private IntegerProperty integerSetting(String key, int defaultValue) {
         IntegerProperty property = new SimpleIntegerProperty(store.getInt(key, defaultValue));
         property.addListener((observable, oldValue, newValue) -> store.putInt(key, newValue.intValue()));
+        return property;
+    }
+
+    private ObjectProperty<FontSettings> fontSetting() {
+        FontSettings defaults = FontSettings.defaults();
+        ObjectProperty<FontSettings> property = new SimpleObjectProperty<>(new FontSettings(
+                store.get(FONT_FAMILY, defaults.family()), store.getDouble(FONT_SIZE, defaults.size())));
+        property.addListener((observable, oldValue, newValue) -> {
+            store.put(FONT_FAMILY, newValue.family());
+            store.putDouble(FONT_SIZE, newValue.size());
+        });
         return property;
     }
 
@@ -68,6 +85,13 @@ public class UserPreferences {
      */
     public IntegerProperty notificationDurationProperty() {
         return notificationDuration;
+    }
+
+    /**
+     * @return the font family and size of diagram text (RF39).
+     */
+    public ObjectProperty<FontSettings> fontSettingsProperty() {
+        return fontSettings;
     }
 
     public int getDiagramWidth() {

@@ -1,11 +1,17 @@
 package br.uefs.umleditor.ui;
 
+import br.uefs.umleditor.geom.Point;
+import br.uefs.umleditor.geom.Rectangle;
+import br.uefs.umleditor.layout.GridSnap;
 import br.uefs.umleditor.model.Diagram;
+import br.uefs.umleditor.render.DiagramRenderer;
+import br.uefs.umleditor.render.FxGraphicsAdapter;
 import br.uefs.umleditor.render.Theme;
 import javafx.geometry.Bounds;
 import javafx.scene.canvas.Canvas;
 import javafx.scene.canvas.GraphicsContext;
 import javafx.scene.control.ScrollPane;
+import javafx.scene.input.MouseEvent;
 import javafx.scene.layout.Pane;
 
 /**
@@ -17,22 +23,24 @@ import javafx.scene.layout.Pane;
  */
 public class DiagramCanvas extends ScrollPane {
 
-    public static final int GRID_SIZE = 10;
-
     /** Zoom factors: two levels below and two levels above the normal size. */
     private static final double[] ZOOM_LEVELS = {0.5, 0.75, 1, 1.5, 2};
     private static final int NORMAL_ZOOM = 2;
+    private static final double LASSO_OPACITY = 0.15;
 
     private final Diagram diagram;
+    private final DiagramRenderer renderer;
+    private final SelectionModel selection;
     private final Pane content = new Pane();
     private final Canvas canvas = new Canvas();
     private int zoomLevel = NORMAL_ZOOM;
     private boolean showGrid;
-    private Theme theme;
+    private Rectangle lasso;
 
-    public DiagramCanvas(Diagram diagram, Theme theme, boolean showGrid) {
+    public DiagramCanvas(Diagram diagram, DiagramRenderer renderer, SelectionModel selection, boolean showGrid) {
         this.diagram = diagram;
-        this.theme = theme;
+        this.renderer = renderer;
+        this.selection = selection;
         this.showGrid = showGrid;
         getStyleClass().add("diagram-canvas");
         content.getStyleClass().add("diagram-outside");
@@ -49,6 +57,21 @@ public class DiagramCanvas extends ScrollPane {
 
     public Canvas getCanvas() {
         return canvas;
+    }
+
+    /**
+     * Converts the position of a mouse event on the canvas to diagram coordinates.
+     */
+    public Point toDiagramPoint(MouseEvent event) {
+        double zoom = getZoom();
+        return new Point((event.getX() + canvas.getLayoutX()) / zoom, (event.getY() + canvas.getLayoutY()) / zoom);
+    }
+
+    /**
+     * @param lasso the selection region being dragged, or null when there is none
+     */
+    public void setLasso(Rectangle lasso) {
+        this.lasso = lasso;
     }
 
     public double getZoom() {
@@ -89,11 +112,6 @@ public class DiagramCanvas extends ScrollPane {
         refresh();
     }
 
-    public void setTheme(Theme theme) {
-        this.theme = theme;
-        refresh();
-    }
-
     private void updateContentSize() {
         double width = diagram.getWidth() * getZoom();
         double height = diagram.getHeight() * getZoom();
@@ -125,6 +143,7 @@ public class DiagramCanvas extends ScrollPane {
     }
 
     private void paint(double offsetX, double offsetY, double zoom) {
+        Theme theme = renderer.getContext().getTheme();
         GraphicsContext gc = canvas.getGraphicsContext2D();
         gc.setTransform(1, 0, 0, 1, 0, 0);
         gc.setFill(theme.getBackground());
@@ -132,19 +151,30 @@ public class DiagramCanvas extends ScrollPane {
         gc.translate(-offsetX, -offsetY);
         gc.scale(zoom, zoom);
         if (showGrid) {
-            paintGrid(gc, offsetX / zoom, offsetY / zoom, canvas.getWidth() / zoom, canvas.getHeight() / zoom);
+            paintGrid(gc, theme, offsetX / zoom, offsetY / zoom, canvas.getWidth() / zoom, canvas.getHeight() / zoom);
+        }
+        gc.setLineWidth(1);
+        renderer.draw(diagram, new FxGraphicsAdapter(gc, renderer.getContext()), selection.getSelected());
+        if (lasso != null) {
+            gc.setGlobalAlpha(LASSO_OPACITY);
+            gc.setFill(theme.getSelection());
+            gc.fillRect(lasso.x(), lasso.y(), lasso.width(), lasso.height());
+            gc.setGlobalAlpha(1);
+            gc.setStroke(theme.getSelection());
+            gc.strokeRect(lasso.x(), lasso.y(), lasso.width(), lasso.height());
         }
     }
 
-    private void paintGrid(GraphicsContext gc, double x, double y, double width, double height) {
+    private void paintGrid(GraphicsContext gc, Theme theme, double x, double y, double width, double height) {
         gc.setStroke(theme.getGrid());
         gc.setLineWidth(1 / getZoom());
         double right = Math.min(x + width, diagram.getWidth());
         double bottom = Math.min(y + height, diagram.getHeight());
-        for (double gridX = Math.floor(x / GRID_SIZE) * GRID_SIZE; gridX <= right; gridX += GRID_SIZE) {
+        int grid = GridSnap.GRID_SIZE;
+        for (double gridX = Math.floor(x / grid) * grid; gridX <= right; gridX += grid) {
             gc.strokeLine(gridX, y, gridX, bottom);
         }
-        for (double gridY = Math.floor(y / GRID_SIZE) * GRID_SIZE; gridY <= bottom; gridY += GRID_SIZE) {
+        for (double gridY = Math.floor(y / grid) * grid; gridY <= bottom; gridY += grid) {
             gc.strokeLine(x, gridY, right, gridY);
         }
     }
