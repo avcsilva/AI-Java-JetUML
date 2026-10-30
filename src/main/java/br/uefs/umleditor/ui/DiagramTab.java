@@ -1,16 +1,24 @@
 package br.uefs.umleditor.ui;
 
+import java.nio.file.Path;
 import java.util.List;
-import java.util.function.Consumer;
+import java.util.Optional;
 
 import br.uefs.umleditor.command.DiagramOperation;
 import br.uefs.umleditor.command.UndoManager;
+import br.uefs.umleditor.export.DiagramImage;
 import br.uefs.umleditor.geom.Point;
 import br.uefs.umleditor.geom.Rectangle;
 import br.uefs.umleditor.model.Diagram;
 import br.uefs.umleditor.model.DiagramElement;
+import br.uefs.umleditor.model.DiagramType;
+import br.uefs.umleditor.model.ElementCompatibility;
+import br.uefs.umleditor.model.InvalidDiagramException;
 import br.uefs.umleditor.model.ToolType;
 import br.uefs.umleditor.model.builder.DiagramBuilder;
+import br.uefs.umleditor.persistence.DiagramContent;
+import br.uefs.umleditor.persistence.DiagramDeserializer;
+import br.uefs.umleditor.persistence.DiagramSerializer;
 import br.uefs.umleditor.render.DiagramRenderer;
 import br.uefs.umleditor.render.FontSettings;
 import br.uefs.umleditor.render.RenderContext;
@@ -24,7 +32,8 @@ import javafx.scene.layout.BorderPane;
 
 /**
  * A tab holding one open diagram: its tool bar, its drawing area, its
- * selection and the history of operations performed on it.
+ * selection, the history of operations performed on it and the file it is
+ * saved in, if any.
  */
 public class DiagramTab extends Tab {
 
@@ -35,18 +44,20 @@ public class DiagramTab extends Tab {
     private final UndoManager undoManager = new UndoManager();
     private final ToolPalette toolPalette;
     private final DiagramCanvas diagramCanvas;
-    private final Consumer<String> errorReporter;
+    private final NotificationArea notifications;
     private ContextMenu contextMenu;
     private boolean autoEditNode;
+    private Path file;
+    private boolean modified;
 
     /**
-     * @param errorReporter shows error notifications to the user (RF41)
+     * @param notifications shows errors and confirmations to the user (RF41)
      */
     public DiagramTab(Diagram diagram, String title, RenderContext renderContext, boolean showGrid,
-                      Consumer<String> errorReporter) {
+                      NotificationArea notifications) {
         super(title);
         this.diagram = diagram;
-        this.errorReporter = errorReporter;
+        this.notifications = notifications;
         this.renderContext = renderContext;
         DiagramRenderer renderer = new DiagramRenderer(renderContext);
         this.builder = DiagramBuilder.forDiagram(diagram, renderer);
@@ -91,11 +102,42 @@ public class DiagramTab extends Tab {
         return diagramCanvas;
     }
 
+    public RenderContext getRenderContext() {
+        return renderContext;
+    }
+
+    /**
+     * @return the file of the diagram, or null if it was never saved
+     */
+    public Path getFile() {
+        return file;
+    }
+
+    /**
+     * Associates the diagram with a file; the tab shows the file name.
+     */
+    public void setFile(Path file) {
+        this.file = file;
+        setText(file.getFileName().toString());
+    }
+
+    /**
+     * @return true if the diagram changed since it was last saved
+     */
+    public boolean isModified() {
+        return modified;
+    }
+
+    public void setModified(boolean modified) {
+        this.modified = modified;
+    }
+
     /**
      * Executes an operation on the diagram and keeps it in the history.
      */
     public void perform(DiagramOperation operation) {
         undoManager.execute(operation);
+        modified = true;
         diagramCanvas.refresh();
     }
 
@@ -104,6 +146,7 @@ public class DiagramTab extends Tab {
      */
     public void record(DiagramOperation operation) {
         undoManager.record(operation);
+        modified = true;
     }
 
     /**
@@ -111,6 +154,7 @@ public class DiagramTab extends Tab {
      */
     public void undo() {
         undoManager.undo();
+        modified = true;
         keepExistingSelection();
         diagramCanvas.refresh();
     }
@@ -120,6 +164,7 @@ public class DiagramTab extends Tab {
      */
     public void redo() {
         undoManager.redo();
+        modified = true;
         keepExistingSelection();
         diagramCanvas.refresh();
     }
@@ -184,10 +229,79 @@ public class DiagramTab extends Tab {
     }
 
     /**
+     * Edit > Copy: keeps the selected elements in the clipboard (RF34).
+     *
+     * @return false if nothing in the selection can be copied
+     */
+    public boolean copySelection(ElementClipboard clipboard) {
+        DiagramBuilder.Fragment fragment = builder.copyFragment(selection.getSelected());
+        if (fragment.isEmpty()) {
+            return false;
+        }
+        clipboard.setContent(DiagramSerializer.toJson(diagram.getType(), fragment.roots(), fragment.edges()));
+        return true;
+    }
+
+    /**
+     * Edit > Cut: copies the selected elements and removes them (RF34).
+     */
+    public void cutSelection(ElementClipboard clipboard) {
+        if (copySelection(clipboard)) {
+            deleteSelection();
+        }
+    }
+
+    /**
+     * Edit > Paste: adds a copy of the clipboard elements and selects them
+     * (RF34). Pasting is refused in sequence diagrams, and in other diagrams
+     * when an element does not belong to the diagram type.
+     */
+    public void paste(ElementClipboard clipboard) {
+        Optional<String> json = clipboard.getContent();
+        if (json.isEmpty()) {
+            return;
+        }
+        if (diagram.getType() == DiagramType.SEQUENCE) {
+            reportError("Pasting is not allowed in sequence diagrams");
+            return;
+        }
+        DiagramContent content;
+        try {
+            content = DiagramDeserializer.read(json.get());
+        } catch (InvalidDiagramException e) {
+            reportError("The copied elements cannot be pasted: " + e.getMessage());
+            return;
+        }
+        boolean compatible = content.allNodes().stream()
+                .allMatch(node -> ElementCompatibility.accepts(diagram.getType(), node))
+                && content.edges().stream().allMatch(edge -> ElementCompatibility.accepts(diagram.getType(), edge));
+        if (!compatible) {
+            reportError("The copied elements are not compatible with a " + diagram.getType().getDisplayName());
+            return;
+        }
+        DiagramBuilder.Paste paste = builder.paste(content.roots(), content.edges(), clipboard.nextPasteOffset());
+        perform(paste.operation());
+        selection.setAll(paste.elements());
+        diagramCanvas.refresh();
+    }
+
+    /**
+     * File > Copy to Clipboard, the To Clipboard tool and Ctrl+B: copies an
+     * image of the whole diagram (RF05).
+     */
+    public void copyImageToClipboard() {
+        if (DiagramImage.copyToClipboard(diagram, renderContext.getFontSettings())) {
+            notifications.showConfirmation("Diagram image copied to the clipboard");
+        } else {
+            reportError("The diagram is empty");
+        }
+    }
+
+    /**
      * Shows an error notification, such as an invalid connection (RF18).
      */
     public void reportError(String message) {
-        errorReporter.accept(message);
+        notifications.showError(message);
     }
 
     /**
@@ -206,7 +320,9 @@ public class DiagramTab extends Tab {
     }
 
     private void runActionTool(ToolType tool) {
-        // To Clipboard is delivered together with image export (phase 6).
+        if (tool == ToolType.TO_CLIPBOARD) {
+            copyImageToClipboard();
+        }
     }
 
     public void setTheme(Theme theme) {

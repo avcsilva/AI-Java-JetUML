@@ -371,6 +371,75 @@ public class DiagramBuilder {
     }
 
     /**
+     * Elements taken from a diagram to be copied (RF34): the root nodes, with
+     * their children, and the edges between the copied nodes.
+     */
+    public record Fragment(List<Node> roots, List<Edge> edges) {
+
+        public boolean isEmpty() {
+            return roots.isEmpty();
+        }
+    }
+
+    /**
+     * Collects what Copy and Cut take from the selection (RF34): the selected
+     * nodes with their children, the fixed points of selected note connectors
+     * and every edge whose two ends are copied. Fields and activation boxes
+     * selected without their parent are not copied, since they cannot exist alone.
+     */
+    public Fragment copyFragment(Collection<? extends DiagramElement> selected) {
+        List<Node> roots = new ArrayList<>(topmostNodes(selected).stream()
+                .filter(node -> !node.requiresParent() && !(node instanceof PointNode)).toList());
+        Set<Node> copied = new LinkedHashSet<>();
+        for (Node root : roots) {
+            collectSubtree(root, copied);
+        }
+        for (Edge edge : edgesIn(selected)) {
+            if (edge.getEnd() instanceof PointNode point && copied.contains(edge.getStart())
+                    && copied.add(point)) {
+                roots.add(point);
+            }
+        }
+        List<Edge> edges = diagram.getEdges().stream()
+                .filter(edge -> copied.contains(edge.getStart()) && copied.contains(edge.getEnd()))
+                .toList();
+        return new Fragment(roots, edges);
+    }
+
+    /**
+     * The operation that pastes elements and the elements it adds, to be selected.
+     */
+    public record Paste(DiagramOperation operation, List<DiagramElement> elements) {
+    }
+
+    /**
+     * Adds copies of elements to this diagram, shifted by the offset and kept
+     * inside the diagram (RF34). The nodes and edges must be new objects that
+     * belong to no diagram.
+     */
+    public Paste paste(List<Node> roots, List<Edge> edges, double offset) {
+        for (Node root : roots) {
+            root.translate(offset, offset);
+        }
+        Point correction = correctionToKeepInside(roots);
+        List<DiagramOperation> operations = new ArrayList<>();
+        List<DiagramElement> elements = new ArrayList<>();
+        int index = diagram.getRootNodes().size();
+        for (Node root : roots) {
+            root.translate(correction.x(), correction.y());
+            operations.add(new AddNodeOperation(diagram, root, null, index++));
+            Set<Node> subtree = new LinkedHashSet<>();
+            collectSubtree(root, subtree);
+            subtree.stream().filter(node -> !(node instanceof PointNode)).forEach(elements::add);
+        }
+        for (Edge edge : edges) {
+            operations.add(new AddEdgeOperation(diagram, edge));
+            elements.add(edge);
+        }
+        return new Paste(new CompoundOperation(operations), elements);
+    }
+
+    /**
      * Shift key (RF15): a selected node inside a package is detached and becomes
      * a root node; a selected root node positioned over a package becomes a child
      * of the innermost package under its center.

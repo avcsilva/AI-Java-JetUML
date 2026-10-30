@@ -47,4 +47,13 @@ public class RenderContext {
     public double lineHeight(TextStyle style) {
         return measure("Ag", style).height();
     }
+
+    /**
+     * @return the distance from the top of a line of text to its baseline
+     */
+    public double baselineOffset(TextStyle style) {
+        measuringText.setFont(fontSettings.font(style));
+        measuringText.setText("Ag");
+        return measuringText.getBaselineOffset();
+    }
 }
