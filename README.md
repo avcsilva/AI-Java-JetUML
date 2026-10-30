@@ -4,7 +4,7 @@ Editor desktop de diagramas UML (Class, Sequence, State, Object e Use Case) escr
 
 A especificação está em [REQUISITOS.md](REQUISITOS.md) e o plano de arquitetura e de fases está em [PLANO.md](PLANO.md).
 
-> **Estado atual:** as **Fases 1 a 4** estão implementadas: esqueleto da aplicação e área de trabalho; nós, renderização e seleção; arestas, layout automático e validação das conexões (exceto chamadas e retornos do diagrama de sequência); desfazer/refazer e painel de propriedades. As demais fases estão planejadas. A tabela de rastreabilidade (seção 4) indica, para cada requisito, se ele já foi implementado e onde, ou em qual fase será entregue.
+> **Estado atual:** as **Fases 1 a 5** estão implementadas: esqueleto da aplicação e área de trabalho; nós, renderização e seleção; arestas, layout automático e validação das conexões; desfazer/refazer e painel de propriedades; diagrama de sequência (chamadas, autochamadas, construtores e retornos). Falta a Fase 6 (arquivos, imagem e área de transferência). A tabela de rastreabilidade (seção 4) indica, para cada requisito, se ele já foi implementado e onde, ou em qual fase será entregue.
 
 ---
 
@@ -64,19 +64,19 @@ src/main/java/br/uefs/umleditor/
                   Edge, Property, BoundsCalculator
   model/nodes/    ClassNode, InterfaceNode, PackageNode, PackageDescriptionNode, NoteNode,
                   PointNode, StateNode, InitialStateNode, FinalStateNode, ObjectNode, FieldNode,
-                  ActorNode, UseCaseNode, ImplicitParameterNode, NodeFactory
+                  ActorNode, UseCaseNode, ImplicitParameterNode, CallNode, NodeFactory
   model/edges/    DependencyEdge, GeneralizationEdge, AssociationEdge, AggregationEdge,
                   ClassRelationshipEdge, Directionality, NoteEdge, StateTransitionEdge,
                   ObjectReferenceEdge, ObjectCollaborationEdge, LabeledEdge,
                   UseCaseAssociationEdge, UseCaseDependencyEdge, UseCaseGeneralizationEdge,
-                  EdgeFactory
+                  CallEdge, ReturnEdge, EdgeFactory
   model/rules/    DiagramRules, ClassDiagramRules, StateDiagramRules, ObjectDiagramRules,
                   UseCaseDiagramRules, SequenceDiagramRules, ValidationResult
-  model/builder/  DiagramBuilder
+  model/builder/  DiagramBuilder, SequenceDiagramBuilder
   command/        DiagramOperation, CompoundOperation, AddNodeOperation, RemoveNodeOperation,
                   MoveNodesOperation, ReparentNodeOperation, AddEdgeOperation,
                   RemoveEdgeOperation, ChangePropertyOperation, UndoManager
-  layout/         GridSnap, EdgePathCalculator
+  layout/         GridSnap, EdgePathCalculator, SequenceLayout
   render/         Theme, RenderContext, FontSettings, TextStyle, StyledText, TextBlock,
                   GraphicsAdapter, FxGraphicsAdapter, LineStyle, ArrowHead, EdgeRenderer,
                   DiagramRenderer
@@ -89,7 +89,7 @@ src/main/resources/br/uefs/umleditor/
   dark.css        aparência do modo escuro
 src/test/java/br/uefs/umleditor/
   model/DiagramTypeTest, model/PropertiesTest, model/builder/DiagramBuilderTest,
-  model/rules/EdgeRulesTest, command/UndoManagerTest, layout/EdgePathCalculatorTest,
+  model/builder/SequenceDiagramBuilderTest, model/rules/EdgeRulesTest, command/UndoManagerTest, layout/EdgePathCalculatorTest,
   render/StyledTextTest, ui/StereotypeInsertionTest
 ```
 
@@ -102,6 +102,16 @@ src/test/java/br/uefs/umleditor/
 - **Note Connector:** arraste de um elemento até uma nota para ligá-los; arraste de uma nota até um espaço vazio para ancorar a extremidade naquele ponto fixo.
 - **Reference (diagrama de objetos):** arraste a partir da parte Value de um campo (à direita do `=`) até o objeto de destino.
 - **Caminho das arestas:** é calculado automaticamente e acompanha os nós quando eles são movidos; para mudar o caminho, mova os nós.
+- **Diagrama de sequência:**
+  - *Primeira chamada:* com a ferramenta Call, arraste da linha de vida do chamador até a linha de vida do chamado. São criadas as caixas de ativação dos dois. A altura onde o arraste começa define a altura da primeira ativação.
+  - *Outras chamadas:* arraste de uma caixa de ativação até outra linha de vida. A nova chamada entra entre as chamadas já existentes daquela ativação, conforme a altura onde o arraste começou.
+  - *Autochamada:* arraste dentro de uma caixa de ativação. A nova ativação aparece aninhada, deslocada para a direita.
+  - *Chamada de construtor:* arraste de uma ativação até a caixa (o retângulo com o nome) de um parâmetro implícito que ainda não tem ativações. A chamada recebe o rótulo «create», o parâmetro é alinhado verticalmente à chamada e ganha uma caixa de ativação logo abaixo.
+  - *Retorno:* com a ferramenta Return, arraste de uma ativação até a ativação que a chamou (ou qualquer ponto da linha de vida dela).
+  - *Posições:* as caixas de ativação são posicionadas automaticamente a partir das chamadas; mover um parâmetro implícito leva junto suas ativações.
+  - *Tentativas inválidas* (segunda ativação sem chamador, soltar na própria linha de vida fora da ativação, retorno para quem não chamou, segundo retorno, construtor de objeto que já tem ativações etc.) não têm efeito e não geram notificação.
+  - *Exclusão:* excluir uma chamada ou ativação exclui também as chamadas que dependem dela.
+  - *Open Bottom:* nas propriedades de uma caixa de ativação, deixa a caixa sem o lado inferior, indicando sequência incompleta.
 - **Selecionar:** com a ferramenta Select, clique em um elemento (nó ou aresta); `Ctrl`+clique adiciona ou remove da seleção; arrastar a partir de um espaço vazio desenha o laço, que seleciona os elementos inteiramente contidos nele. Edit > Select All (`Ctrl+A`) seleciona tudo.
 - **Mover:** arraste os elementos selecionados. A posição se alinha à grade de 10 px, com a grade visível ou não, e os elementos não saem da área do diagrama. Campos acompanham o objeto e não são movidos sozinhos.
 - **Pacotes:** com um nó selecionado posicionado sobre um pacote, pressione `Shift` para incluí-lo no pacote; com um filho de pacote selecionado, `Shift` o desanexa. O pacote se ajusta para conter os filhos.
@@ -193,7 +203,7 @@ Propriedades específicas de cada tipo:
 | `AssociationEdge` | Class | `startLabel`, `middleLabel`, `endLabel`; `directionality`: `Unspecified` \| `Unidirectional` \| `Bidirectional` |
 | `AggregationEdge` | Class | as mesmas de `AssociationEdge` e `aggregationType`: `Aggregation` \| `Composition` |
 | `NoteEdge` | todos | nenhuma |
-| `CallEdge` | Sequence | `middleLabel` |
+| `CallEdge` | Sequence | `middleLabel`; `constructorCall` (booleano, verdadeiro em chamadas de construtor «create») |
 | `ReturnEdge` | Sequence | `middleLabel` |
 | `StateTransitionEdge` | State | `middleLabel` |
 | `ObjectReferenceEdge` | Object | nenhuma (`start` é um `FieldNode`) |
@@ -290,14 +300,14 @@ Caminhos abreviados: `app` = `br.uefs.umleditor.app`, `model` = `br.uefs.umledit
 | RF17 Layout automático | ✅ Implementado | `layout.EdgePathCalculator.getPath(Edge)`, `betweenNodes(Edge)` (segmentos entre as bordas, arestas paralelas afastadas, transições opostas em arco), `selfLoop(Edge)`, `referencePath(FieldNode, Node)`, `exitPoint(...)`; `render.EdgeRenderer.draw(Edge, List<Point>, GraphicsAdapter)`; `render.ArrowHead.draw(...)`. O caminho não é armazenado: é recalculado a cada desenho a partir da posição dos nós. |
 | RF18 Validação das conexões | ✅ Implementado | `model.rules.DiagramRules.forType(DiagramType)`, `check(Diagram, Edge, Node, Node)`; `model.rules.ClassDiagramRules.checkEdge(...)` (duplicidade, ciclos diretos, Associação + Agregação); `model.rules.ObjectDiagramRules.checkEdge(...)` (ciclos de colaboração); `model.rules.UseCaseDiagramRules`; `model.rules.ValidationResult`; `ui.CanvasController.finishEdge(Point)` → `ui.DiagramTab.reportError(String)` → `ui.NotificationArea.showError(String)` |
 | RF19 Autoarestas e transições | ✅ Implementado | `model.builder.DiagramBuilder.createEdge(...)` (arraste dentro do mesmo nó); `model.rules.ClassDiagramRules.checkEdge(...)` (auto-herança e autodependência); `model.rules.UseCaseDiagramRules.checkEdge(...)`; `model.rules.ObjectDiagramRules.checkEdge(...)` (autocolaboração); `model.rules.StateDiagramRules.checkEdge(...)` e `MAX_TRANSITIONS_PER_DIRECTION`; `layout.EdgePathCalculator.selfLoop(Edge)` |
-| RF20 Propriedades das arestas | ✅ Implementado | `getProperties()` de `model.edges.ClassRelationshipEdge` (Start/Middle/End Label, Directionality), `AggregationEdge` (+ Aggregation Type), `GeneralizationEdge` (Generalization Type), `DependencyEdge` (Directionality Unidirectional/Bidirectional), `LabeledEdge` (Middle Label de Transition e Collaboration), `UseCaseDependencyEdge` (Dependency Type None/Include/Extend); `ui.PropertyEditor.edit(...)`; `render.EdgeRenderer.appearanceOf(Edge)`. Call e Return (Middle Label) chegam com o diagrama de sequência, na Fase 5. |
+| RF20 Propriedades das arestas | ✅ Implementado | `getProperties()` de `model.edges.ClassRelationshipEdge` (Start/Middle/End Label, Directionality), `AggregationEdge` (+ Aggregation Type), `GeneralizationEdge` (Generalization Type), `DependencyEdge` (Directionality Unidirectional/Bidirectional), `LabeledEdge` (Middle Label de Transition e Collaboration), `UseCaseDependencyEdge` (Dependency Type None/Include/Extend); `ui.PropertyEditor.edit(...)`; `render.EdgeRenderer.appearanceOf(Edge)`. `CallEdge` e `ReturnEdge` têm Middle Label por herdarem de `LabeledEdge`. |
 
 ### 4.5 Edição, propriedades e texto
 
 | Requisito | Situação | Classes e métodos |
 |---|---|---|
 | RF21 Desfazer e refazer | ✅ Implementado | `app.MainWindow.createEditMenu()` (Undo Ctrl+Z, Redo Ctrl+Y); `ui.DiagramTab.undo()`, `redo()`, `perform(DiagramOperation)`, `record(DiagramOperation)`; `command.UndoManager.execute(...)`, `record(...)`, `undo()`, `redo()`; operações reversíveis do pacote `command` (inclusive `ChangePropertyOperation`) |
-| RF22 Acessar propriedades | ✅ Implementado | `model.DiagramElement.getProperties()` e as implementações em `model.NamedNode`, `model.nodes.ClassNode`, `InterfaceNode`, `PackageDescriptionNode`, `FieldNode`, `NoteNode`; `model.Property`; `ui.PropertyEditor.edit(...)`, `createInput(...)`, `moveFocusOnTab(...)` (Tab), filtro de Esc; `ui.CanvasController.mousePressed(MouseEvent)` (duplo clique); `ui.DiagramTab.editSelectedProperties()`, `editProperties(DiagramElement)`; `app.MainWindow.createEditMenu()` (Properties, Ctrl+Enter). A opção Open Bottom de Call chega na Fase 5. |
+| RF22 Acessar propriedades | ✅ Implementado | `model.DiagramElement.getProperties()` e as implementações em `model.NamedNode`, `model.nodes.ClassNode`, `InterfaceNode`, `PackageDescriptionNode`, `FieldNode`, `NoteNode`; `model.Property`; `ui.PropertyEditor.edit(...)`, `createInput(...)`, `moveFocusOnTab(...)` (Tab), filtro de Esc; `ui.CanvasController.mousePressed(MouseEvent)` (duplo clique); `ui.DiagramTab.editSelectedProperties()`, `editProperties(DiagramElement)`; `app.MainWindow.createEditMenu()` (Properties, Ctrl+Enter). Open Bottom da caixa de ativação: `model.nodes.CallNode.getProperties()`. |
 | RF23 Estereótipos UML | ✅ Implementado | `ui.PropertyEditor.insertStereotypeOnCtrlQ(KeyEvent, TextInputControl)`; `ui.StereotypeInsertion.insert(String, int, int)` |
 | RF24 Formatação de texto | ✅ Implementado | `render.StyledText.parse(String)`, `lines(String)`; `render.TextStyle.with(StyledLine)`; `render.TextBlock.measure(...)` e `draw(...)`; `render.FxGraphicsAdapter.drawText(...)` (itálico pela fonte, sublinhado desenhado sob o texto) |
 
@@ -312,11 +322,11 @@ Caminhos abreviados: `app` = `br.uefs.umleditor.app`, `model` = `br.uefs.umledit
 
 | Requisito | Situação | Classes e métodos |
 |---|---|---|
-| RF27 Criar chamadas | ⏳ Fase 5 | `model.builder.SequenceDiagramBuilder`, `model.nodes.CallNode`, `model.edges.CallEdge`, `layout.SequenceLayout` |
-| RF28 Criar autochamadas | ⏳ Fase 5 | `model.builder.SequenceDiagramBuilder` |
-| RF29 Criar chamadas de construtor | ⏳ Fase 5 | `model.builder.SequenceDiagramBuilder`, `layout.SequenceLayout` |
-| RF30 Validar sequência de chamadas | ⏳ Fase 5 | `model.rules.SequenceDiagramRules`, `model.rules.DiagramStructureValidator` |
-| RF31 Sequência incompleta | ⏳ Fase 5 | `model.nodes.CallNode` (`openBottom`), renderizador de `CallNode` |
+| RF27 Criar chamadas | ✅ Implementado | `model.edges.EdgeFactory.create(ToolType)` (Call); `model.builder.SequenceDiagramBuilder.createEdge(...)`, `createCall(...)` (primeira chamada a partir da linha de vida, demais a partir de ativações), `insertionIndex(CallNode, double)`; `model.nodes.CallNode`; `model.nodes.ImplicitParameterNode.canAccept(Node)`; `model.edges.CallEdge`; `layout.SequenceLayout.apply()`, `place(CallNode, double)`; `layout.EdgePathCalculator.callPath(CallEdge)`; `render.nodes.CallNodeRenderer`; `render.DiagramRenderer.layout(Diagram)` |
+| RF28 Criar autochamadas | ✅ Implementado | `model.builder.SequenceDiagramBuilder.createCall(...)` (arraste que começa e termina na mesma ativação); `layout.SequenceLayout.place(...)` (ativação aninhada deslocada); `layout.EdgePathCalculator.callPath(CallEdge)` (laço no lado direito) |
+| RF29 Criar chamadas de construtor | ✅ Implementado | `model.builder.SequenceDiagramBuilder.createCall(...)` (destino na caixa do parâmetro, via `getConnectionBounds`); `model.edges.CallEdge.setConstructorCall(boolean)`, `CREATE_LABEL`; `layout.SequenceLayout.place(...)` (alinha o parâmetro à chamada e anexa a ativação abaixo da caixa); `render.nodes.ImplicitParameterNodeRenderer.getBoxBounds(...)` |
+| RF30 Validar sequência de chamadas | ✅ Implementado | `model.rules.SequenceDiagramRules.checkEdge(...)` (apenas entre CallNodes, um chamador por ativação, retorno só para o chamador e uma vez), `callerOf(...)`; `model.builder.SequenceDiagramBuilder.createCall(...)` (uma única ativação raiz), `createReturn(...)`, `removeElements(...)`; falhas retornam `ValidationResult.SILENT_FAILURE` e não geram notificação. A verificação ao abrir arquivos entra com a Fase 6. |
+| RF31 Sequência incompleta | ✅ Implementado | `model.nodes.CallNode.isOpenBottom()`, `setOpenBottom(boolean)`, `getProperties()`; `render.nodes.CallNodeRenderer.draw(...)` (sem o lado inferior) |
 
 ### 4.8 Seleção, transferência e exclusão
 
@@ -325,7 +335,7 @@ Caminhos abreviados: `app` = `br.uefs.umleditor.app`, `model` = `br.uefs.umledit
 | RF32 Seleção | ✅ Implementado | `ui.SelectionModel.set(DiagramElement)`, `toggle(DiagramElement)`, `setAll(...)`, `addAll(...)`, `clear()`; `ui.CanvasController.startSelection(Point, boolean)` (clique e Ctrl+clique), `mouseDragged(MouseEvent)` (laço); `model.builder.DiagramBuilder.findElementAt(Point)`, `findElementsInside(Rectangle)`; `layout.EdgePathCalculator.contains(Edge, Point)`; `ui.DiagramCanvas.setLasso(Rectangle)`; `render.DiagramRenderer.draw(...)` (marcadores de seleção) |
 | RF33 Selecionar tudo | ✅ Implementado | `app.MainWindow.createEditMenu()` (Select All, Ctrl+A); `ui.DiagramTab.selectAll()`; `model.builder.DiagramBuilder.getAllElements()` (nós e arestas); `model.builder.DiagramBuilder.movableNodes(...)` (mover a seleção inteira) |
 | RF34 Recortar, copiar e colar | ⏳ Fase 6 | `ui.ElementClipboard`, `model.builder.DiagramBuilder` |
-| RF35 Excluir elementos | ✅ Implementado | `app.MainWindow.createEditMenu()` (Delete, tecla Delete); `ui.DiagramTab.deleteSelection()`; `model.builder.DiagramBuilder.removeElements(...)`, `topmostNodes(...)`; `command.RemoveEdgeOperation`, `command.RemoveNodeOperation`, `command.CompoundOperation` |
+| RF35 Excluir elementos | ✅ Implementado | `app.MainWindow.createEditMenu()` (Delete, tecla Delete); `ui.DiagramTab.deleteSelection()`; `model.builder.DiagramBuilder.removeElements(...)`, `topmostNodes(...)`; `command.RemoveEdgeOperation`, `command.RemoveNodeOperation`, `command.CompoundOperation`; em sequência, `model.builder.SequenceDiagramBuilder.removeElements(...)` remove também as chamadas dependentes |
 
 ### 4.9 Visualização e interface
 
@@ -350,4 +360,4 @@ Caminhos abreviados: `app` = `br.uefs.umleditor.app`, `model` = `br.uefs.umledit
 |---|---|---|
 | RNF01 Desempenho | ✅ Implementado | `app.UserPreferences.getDefaultDiagramWidth()` e `getDefaultDiagramHeight()` (tamanho inicial proporcional à tela); `ui.DiagramCanvas.refresh()` (o canvas cobre só a área visível, não o diagrama inteiro) |
 | RNF02 Formato aberto | ⏳ Fase 6 | Formato documentado na seção 2 deste README; `persistence.DiagramSerializer`, `persistence.DiagramDeserializer` |
-| RNF03 Múltiplas formas de interação | 🟡 Parcial | Implementado: ferramentas por barra, atalho e menu de contexto (`ui.ToolPalette.selectTool(int)`, `ui.DiagramTab.handleToolShortcut(KeyEvent)`, `ui.ToolPalette.createContextMenu()`); zoom por menu e atalho (`app.MainWindow.createViewMenu()`); Select All e Delete por menu e teclado (`app.MainWindow.createEditMenu()`); seleção de nós e arestas por clique e por laço (`ui.CanvasController`). propriedades por duplo clique, Ctrl+Enter e Edit > Properties; desfazer e refazer por menu e atalho. Fases 5–6: cópia de imagem por menu/barra/Ctrl+B e as operações de arquivo. |
+| RNF03 Múltiplas formas de interação | 🟡 Parcial | Implementado: ferramentas por barra, atalho e menu de contexto (`ui.ToolPalette.selectTool(int)`, `ui.DiagramTab.handleToolShortcut(KeyEvent)`, `ui.ToolPalette.createContextMenu()`); zoom por menu e atalho (`app.MainWindow.createViewMenu()`); Select All e Delete por menu e teclado (`app.MainWindow.createEditMenu()`); seleção de nós e arestas por clique e por laço (`ui.CanvasController`). propriedades por duplo clique, Ctrl+Enter e Edit > Properties; desfazer e refazer por menu e atalho. Fase 6: cópia de imagem por menu/barra/Ctrl+B e as operações de arquivo. |
