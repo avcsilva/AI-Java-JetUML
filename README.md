@@ -4,7 +4,7 @@ Editor desktop de diagramas UML (Class, Sequence, State, Object e Use Case) escr
 
 A especificação está em [REQUISITOS.md](REQUISITOS.md) e o plano de arquitetura e de fases está em [PLANO.md](PLANO.md).
 
-> **Estado atual:** as **Fases 1 a 5** estão implementadas: esqueleto da aplicação e área de trabalho; nós, renderização e seleção; arestas, layout automático e validação das conexões; desfazer/refazer e painel de propriedades; diagrama de sequência (chamadas, autochamadas, construtores e retornos). Falta a Fase 6 (arquivos, imagem e área de transferência). A tabela de rastreabilidade (seção 4) indica, para cada requisito, se ele já foi implementado e onde, ou em qual fase será entregue.
+> **Estado atual:** as seis fases do [PLANO.md](PLANO.md) estão implementadas e todos os requisitos (RF01 a RF42, RNF01 a RNF03) estão atendidos. A tabela de rastreabilidade (seção 4) indica as classes e os métodos que implementam cada um.
 
 ---
 
@@ -23,7 +23,7 @@ As dependências são baixadas automaticamente pelo Maven:
 | Dependência | Uso |
 |---|---|
 | `org.openjfx:javafx-controls` 21.0.6 | Interface gráfica |
-| `org.openjfx:javafx-swing` 21.0.6 | Codificação de imagens PNG/JPEG/GIF/BMP no Export Image (Fase 6) |
+| `org.openjfx:javafx-swing` 21.0.6 | Codificação de imagens PNG/JPEG/GIF/BMP no Export Image (RF04) |
 | `org.junit.jupiter:junit-jupiter` 5.10.2 | Testes unitários (escopo `test`) |
 
 ### Comandos
@@ -51,7 +51,7 @@ mvn clean compile
 ### Observações
 
 - Com JDK mais novo que o 21, o JavaFX 21 imprime um aviso sobre `sun.misc.Unsafe` ao iniciar. Ele não afeta o funcionamento.
-- As preferências do usuário (grade, dicas de ferramenta, modo escuro, duração das notificações, tamanho do diagrama) são guardadas com `java.util.prefs.Preferences` e mantidas entre execuções.
+- As preferências do usuário (grade, dicas de ferramenta, Auto Edit Node, modo escuro, fonte, duração das notificações, tamanho do diagrama) e a lista de arquivos recentes são guardadas com `java.util.prefs.Preferences` e mantidas entre execuções.
 
 ### Estrutura do projeto
 
@@ -61,7 +61,7 @@ src/main/java/br/uefs/umleditor/
   app/            UmlEditorApp, MainWindow, WelcomePane, UserPreferences
   geom/           Point, Rectangle, Dimension
   model/          Diagram, DiagramType, ToolType, DiagramElement, Node, NamedNode, ParentNode,
-                  Edge, Property, BoundsCalculator
+                  Edge, Property, BoundsCalculator, ElementCompatibility, InvalidDiagramException
   model/nodes/    ClassNode, InterfaceNode, PackageNode, PackageDescriptionNode, NoteNode,
                   PointNode, StateNode, InitialStateNode, FinalStateNode, ObjectNode, FieldNode,
                   ActorNode, UseCaseNode, ImplicitParameterNode, CallNode, NodeFactory
@@ -71,31 +71,43 @@ src/main/java/br/uefs/umleditor/
                   UseCaseAssociationEdge, UseCaseDependencyEdge, UseCaseGeneralizationEdge,
                   CallEdge, ReturnEdge, EdgeFactory
   model/rules/    DiagramRules, ClassDiagramRules, StateDiagramRules, ObjectDiagramRules,
-                  UseCaseDiagramRules, SequenceDiagramRules, ValidationResult
+                  UseCaseDiagramRules, SequenceDiagramRules, ValidationResult,
+                  DiagramStructureValidator
   model/builder/  DiagramBuilder, SequenceDiagramBuilder
   command/        DiagramOperation, CompoundOperation, AddNodeOperation, RemoveNodeOperation,
                   MoveNodesOperation, ReparentNodeOperation, AddEdgeOperation,
                   RemoveEdgeOperation, ChangePropertyOperation, UndoManager
   layout/         GridSnap, EdgePathCalculator, SequenceLayout
   render/         Theme, RenderContext, FontSettings, TextStyle, StyledText, TextBlock,
-                  GraphicsAdapter, FxGraphicsAdapter, LineStyle, ArrowHead, EdgeRenderer,
-                  DiagramRenderer
+                  GraphicsAdapter, FxGraphicsAdapter, SvgGraphicsAdapter, LineStyle, ArrowHead,
+                  EdgeRenderer, DiagramRenderer
   render/nodes/   NodeRenderer e um renderizador por família de nós
+  persistence/    DiagramSerializer, DiagramDeserializer, DiagramContent, RecentFiles
+  persistence/json/ JsonParser, JsonWriter, JsonException
+  export/         DiagramImage, ImageFormat
   ui/             DiagramTab, DiagramCanvas, CanvasController, SelectionModel, ToolPalette,
-                  ToolIconPainter, NotificationArea, PropertyEditor, StereotypeInsertion
+                  ToolIconPainter, NotificationArea, PropertyEditor, StereotypeInsertion,
+                  ElementClipboard
   ui/dialogs/     DiagramSizeDialog, FontDialog, NotificationDurationDialog, SpinnerSupport
 src/main/resources/br/uefs/umleditor/
   base.css        aparência padrão (clara) e estilo das notificações
   dark.css        aparência do modo escuro
 src/test/java/br/uefs/umleditor/
   model/DiagramTypeTest, model/PropertiesTest, model/builder/DiagramBuilderTest,
-  model/builder/SequenceDiagramBuilderTest, model/rules/EdgeRulesTest, command/UndoManagerTest, layout/EdgePathCalculatorTest,
-  render/StyledTextTest, ui/StereotypeInsertionTest
+  model/builder/SequenceDiagramBuilderTest, model/builder/CopyPasteTest,
+  model/rules/EdgeRulesTest, command/UndoManagerTest, layout/EdgePathCalculatorTest,
+  render/StyledTextTest, ui/StereotypeInsertionTest, persistence/DiagramFileTest,
+  persistence/json/JsonTest, export/ImageFormatTest
 ```
 
-### Como usar (funcionalidades disponíveis)
+### Como usar
 
 - **Criar diagrama:** botões da tela de boas-vindas ou File > New.
+- **Arquivos:** File > Open (`Ctrl+O`) abre um arquivo `.json`; File > Recent Files lista os 8 últimos arquivos abertos ou salvos; File > Save (`Ctrl+S`) grava no arquivo do diagrama (ou pergunta onde, se ele ainda não tem arquivo); File > Save As grava em outro arquivo; File > Close (`Ctrl+W`) fecha a aba. Ao fechar uma aba, ou sair, com alterações não salvas, a aplicação pergunta se deve salvar. Um arquivo aberto recebe o tamanho configurado em View > Set Diagram Size, ampliado se o conteúdo for maior.
+- **Duplicar:** File > Duplicate (`Ctrl+D`) abre uma cópia do diagrama atual em uma nova aba, ainda sem arquivo.
+- **Exportar imagem:** File > Export Image salva o diagrama como SVG, PNG, JPEG, GIF ou BMP, conforme o tipo escolhido em "Save as type" (ou a extensão digitada no nome do arquivo).
+- **Copiar imagem:** File > Copy to Clipboard, a ferramenta To Clipboard da barra ou `Ctrl+B` copiam uma imagem do diagrama inteiro para a área de transferência e mostram uma notificação de confirmação. A imagem exportada ou copiada é recortada nos limites do conteúdo, não tem a grade e usa sempre as cores claras.
+- **Recortar, copiar e colar:** Edit > Cut (`Ctrl+X`), Copy (`Ctrl+C`) e Paste (`Ctrl+V`) atuam sobre os elementos selecionados, no mesmo diagrama ou em outra aba. Os elementos colados aparecem deslocados e ficam selecionados. Colar em um diagrama de outro tipo só é permitido se todos os elementos existirem naquele tipo (uma nota, por exemplo, pode ir para qualquer diagrama); caso contrário, aparece uma notificação de erro. Colar em diagramas de sequência não é permitido. Campos e caixas de ativação selecionados sem o objeto ou a linha de vida a que pertencem não são copiados.
 - **Escolher ferramenta:** clique na barra lateral, teclas `1`–`9`, `0`, `A`, `B`… ou clique direito no diagrama.
 - **Criar nó:** com uma ferramenta de nó ativa, clique em um espaço vazio. Clicar dentro de um pacote cria o nó como filho do pacote; com a ferramenta Field, clique dentro de um objeto para criar um campo. Clicar sobre outro nó não tem efeito.
 - **Criar aresta:** com uma ferramenta de aresta ativa, pressione o botão sobre o nó de origem, arraste a linha elástica e solte sobre o nó de destino. Arrastar dentro de um mesmo nó cria uma autoaresta, quando o tipo permite. Soltar em espaço vazio não tem efeito. Conexões inválidas não alteram o diagrama e aparecem como notificação de erro em vermelho.
@@ -138,8 +150,6 @@ src/test/java/br/uefs/umleditor/
 
 ## 2. Formato JSON dos arquivos de diagrama (RNF02)
 
-> **Situação:** a leitura e a gravação de arquivos (RF02) serão implementadas na **Fase 6**. Esta seção é a especificação do formato que será adotado, conforme o [PLANO.md](PLANO.md).
-
 Cada arquivo guarda um único diagrama, como um objeto JSON em UTF-8. As coordenadas são absolutas, em pixels, com origem no canto superior esquerdo do diagrama. Os `id` são inteiros válidos apenas dentro do arquivo e servem para que arestas e listas de filhos referenciem os nós.
 
 ### 2.1 Objeto raiz
@@ -148,8 +158,8 @@ Cada arquivo guarda um único diagrama, como um objeto JSON em UTF-8. As coorden
 |---|---|---|
 | `formatVersion` | string | Versão do formato. Atualmente `"1.0"`. |
 | `diagram` | string | Tipo do diagrama: `ClassDiagram`, `SequenceDiagram`, `StateDiagram`, `ObjectDiagram` ou `UseCaseDiagram`. |
-| `width` | inteiro | Largura do diagrama em pixels (250 a 4000). |
-| `height` | inteiro | Altura do diagrama em pixels (250 a 4000). |
+| `width` | inteiro | Largura do diagrama quando foi salvo, em pixels (250 a 4000). Ao abrir o arquivo, vale o tamanho configurado na aplicação, ampliado se o conteúdo for maior (RF38); o valor é mantido em File > Duplicate. |
+| `height` | inteiro | Altura do diagrama quando foi salvo, em pixels (250 a 4000), com o mesmo uso de `width`. |
 | `nodes` | array | Todos os nós, inclusive os filhos de outros nós. |
 | `edges` | array | Todas as arestas. |
 
@@ -241,12 +251,16 @@ Em diagramas de sequência, a ordem das `CallEdge` no array `edges` define a ord
 
 Ao abrir um arquivo, a aplicação verifica sua estrutura. Se houver erro, o arquivo não é aberto e uma notificação de erro é exibida. São rejeitados:
 
-- JSON malformado, `diagram` desconhecido ou tipos de nó/aresta incompatíveis com o diagrama;
+- JSON malformado, `diagram` desconhecido ou tipos de nó/aresta que não existem naquele tipo de diagrama;
 - `id` duplicados, ou `start`, `end` e `children` que não apontam para nós existentes;
-- `FieldNode` que não seja filho de um `ObjectNode` (RF25);
-- em diagramas de sequência: `CallEdge`/`ReturnEdge` cujos extremos não sejam `CallNode`, `CallNode` com mais de um chamador ou mais de um `CallNode` raiz (RF30).
+- filhos que o pai não aceita (por exemplo, uma nota dentro de um pacote), nós com mais de um pai ou contenção circular;
+- `FieldNode` que não seja filho de um `ObjectNode` e `CallNode` fora de uma linha de vida (RF25);
+- arestas que violam as regras de conexão do tipo de diagrama, como arestas repetidas, ciclos diretos ou autoarestas proibidas (RF18, RF19);
+- em diagramas de sequência: `CallEdge`/`ReturnEdge` cujos extremos não sejam `CallNode`, `CallNode` com mais de um chamador, retorno que não volta ao chamador ou mais de um `CallNode` sem chamador (RF30).
 
-Se o diagrama for maior que o tamanho configurado, `width` e `height` são ampliados para comportá-lo (RF38).
+Propriedades de texto ausentes são lidas como vazias, e propriedades de escolha ausentes recebem o valor padrão da aresta. Valores de escolha (`directionality`, `generalizationType`, `aggregationType`, `dependencyType`) aceitam maiúsculas ou minúsculas.
+
+O mesmo formato é usado internamente para os elementos copiados com Cut/Copy (RF34), com `width` e `height` iguais a 0.
 
 ---
 
@@ -255,8 +269,6 @@ Se o diagrama for maior que o tamanho configurado, `width` e `height` são ampli
 | Situação | Significado |
 |---|---|
 | ✅ Implementado | Atendido pelo código atual. |
-| 🟡 Parcial | Parte do requisito já está implementada; o restante tem a fase indicada. |
-| ⏳ Fase N | Ainda não implementado; as classes listadas são as previstas no [PLANO.md](PLANO.md) e podem mudar durante a implementação. |
 
 Caminhos abreviados: `app` = `br.uefs.umleditor.app`, `model` = `br.uefs.umleditor.model`, `ui` = `br.uefs.umleditor.ui`, e assim por diante.
 
@@ -267,11 +279,11 @@ Caminhos abreviados: `app` = `br.uefs.umleditor.app`, `model` = `br.uefs.umledit
 | Requisito | Situação | Classes e métodos |
 |---|---|---|
 | RF01 Criar novo diagrama | ✅ Implementado | `app.WelcomePane(Consumer<DiagramType>)`; `app.MainWindow.createFileMenu()` (File > New); `app.MainWindow.newDiagram(DiagramType)`; `app.MainWindow.showWelcomeIfEmpty()`; `model.DiagramType`; `model.Diagram(DiagramType, int, int)`; `ui.DiagramTab(Diagram, String, RenderContext, boolean)` |
-| RF02 Abrir, salvar e fechar | ⏳ Fase 6 | `persistence.json.JsonParser`, `persistence.json.JsonWriter`, `persistence.DiagramSerializer`, `persistence.DiagramDeserializer`, `persistence.RecentFiles`, `model.rules.DiagramStructureValidator`, `app.MainWindow` (Open, Recent Files, Close, Save, Save As) |
-| RF03 Duplicar diagrama | ⏳ Fase 6 | `app.MainWindow` (File > Duplicate), `persistence.DiagramSerializer` |
-| RF04 Exportar como imagem | ⏳ Fase 6 | `export.ImageExporter`, `render.SvgGraphicsAdapter`, `render.DiagramPainter` |
-| RF05 Copiar para a área de transferência | ⏳ Fase 6 | `export.ClipboardImageExporter`; `ui.DiagramTab.runActionTool(ToolType)` (hoje sem efeito); `app.MainWindow` (Copy to Clipboard, Ctrl+B) |
-| RF06 Encerrar a aplicação | ✅ Implementado | `app.MainWindow.createFileMenu()` (item Exit, Ctrl+Q, `Platform.exit()`). A confirmação de alterações não salvas entra na Fase 6. |
+| RF02 Abrir, salvar e fechar | ✅ Implementado | `app.MainWindow.open()`, `openFile(Path)`, `save(DiagramTab)`, `saveAs(DiagramTab)`, `write(DiagramTab, Path)`, `closeCurrent()`, `confirmClose(DiagramTab)`, `updateRecentMenu()`; `persistence.RecentFiles`; `persistence.DiagramSerializer.toJson(Diagram)`; `persistence.DiagramDeserializer.read(String)`, `readDiagram(String)`; `persistence.json.JsonParser`, `JsonWriter`; `model.rules.DiagramStructureValidator.build(...)`; `ui.DiagramTab.getFile()`, `setFile(Path)`, `isModified()` |
+| RF03 Duplicar diagrama | ✅ Implementado | `app.MainWindow.duplicate()` (File > Duplicate, Ctrl+D): serializa o diagrama com `persistence.DiagramSerializer.toJson(Diagram)` e o relê com `persistence.DiagramDeserializer.readDiagram(String)` em uma nova aba |
+| RF04 Exportar como imagem | ✅ Implementado | `app.MainWindow.exportImage()` (filtros de "Save as type"); `export.ImageFormat` (SVG, PNG, JPEG, GIF, BMP), `fromFileName(String)`; `export.DiagramImage.export(...)`, `toImage(...)`, `toSvg(...)`, `contentBounds(...)`; `render.SvgGraphicsAdapter` |
+| RF05 Copiar para a área de transferência | ✅ Implementado | `export.DiagramImage.copyToClipboard(Diagram, FontSettings)` (sem grade, recortada no conteúdo); `ui.DiagramTab.copyImageToClipboard()` (notificação de confirmação), `runActionTool(ToolType)` (ferramenta To Clipboard); `app.MainWindow.createFileMenu()` (Copy to Clipboard, Ctrl+B) |
+| RF06 Encerrar a aplicação | ✅ Implementado | `app.MainWindow.exit()` (File > Exit, Ctrl+Q) e `stage.setOnCloseRequest(...)`, ambos com `confirmCloseAll()` para diagramas não salvos |
 
 ### 4.2 Barra de ferramentas e área de trabalho
 
@@ -325,7 +337,7 @@ Caminhos abreviados: `app` = `br.uefs.umleditor.app`, `model` = `br.uefs.umledit
 | RF27 Criar chamadas | ✅ Implementado | `model.edges.EdgeFactory.create(ToolType)` (Call); `model.builder.SequenceDiagramBuilder.createEdge(...)`, `createCall(...)` (primeira chamada a partir da linha de vida, demais a partir de ativações), `insertionIndex(CallNode, double)`; `model.nodes.CallNode`; `model.nodes.ImplicitParameterNode.canAccept(Node)`; `model.edges.CallEdge`; `layout.SequenceLayout.apply()`, `place(CallNode, double)`; `layout.EdgePathCalculator.callPath(CallEdge)`; `render.nodes.CallNodeRenderer`; `render.DiagramRenderer.layout(Diagram)` |
 | RF28 Criar autochamadas | ✅ Implementado | `model.builder.SequenceDiagramBuilder.createCall(...)` (arraste que começa e termina na mesma ativação); `layout.SequenceLayout.place(...)` (ativação aninhada deslocada); `layout.EdgePathCalculator.callPath(CallEdge)` (laço no lado direito) |
 | RF29 Criar chamadas de construtor | ✅ Implementado | `model.builder.SequenceDiagramBuilder.createCall(...)` (destino na caixa do parâmetro, via `getConnectionBounds`); `model.edges.CallEdge.setConstructorCall(boolean)`, `CREATE_LABEL`; `layout.SequenceLayout.place(...)` (alinha o parâmetro à chamada e anexa a ativação abaixo da caixa); `render.nodes.ImplicitParameterNodeRenderer.getBoxBounds(...)` |
-| RF30 Validar sequência de chamadas | ✅ Implementado | `model.rules.SequenceDiagramRules.checkEdge(...)` (apenas entre CallNodes, um chamador por ativação, retorno só para o chamador e uma vez), `callerOf(...)`; `model.builder.SequenceDiagramBuilder.createCall(...)` (uma única ativação raiz), `createReturn(...)`, `removeElements(...)`; falhas retornam `ValidationResult.SILENT_FAILURE` e não geram notificação. A verificação ao abrir arquivos entra com a Fase 6. |
+| RF30 Validar sequência de chamadas | ✅ Implementado | `model.rules.SequenceDiagramRules.checkEdge(...)` (apenas entre CallNodes, um chamador por ativação, retorno só para o chamador e uma vez), `callerOf(...)`; `model.builder.SequenceDiagramBuilder.createCall(...)` (uma única ativação raiz), `createReturn(...)`, `removeElements(...)`; falhas retornam `ValidationResult.SILENT_FAILURE` e não geram notificação. A mesma verificação é feita ao abrir arquivos (`model.rules.DiagramStructureValidator`). |
 | RF31 Sequência incompleta | ✅ Implementado | `model.nodes.CallNode.isOpenBottom()`, `setOpenBottom(boolean)`, `getProperties()`; `render.nodes.CallNodeRenderer.draw(...)` (sem o lado inferior) |
 
 ### 4.8 Seleção, transferência e exclusão
@@ -334,7 +346,7 @@ Caminhos abreviados: `app` = `br.uefs.umleditor.app`, `model` = `br.uefs.umledit
 |---|---|---|
 | RF32 Seleção | ✅ Implementado | `ui.SelectionModel.set(DiagramElement)`, `toggle(DiagramElement)`, `setAll(...)`, `addAll(...)`, `clear()`; `ui.CanvasController.startSelection(Point, boolean)` (clique e Ctrl+clique), `mouseDragged(MouseEvent)` (laço); `model.builder.DiagramBuilder.findElementAt(Point)`, `findElementsInside(Rectangle)`; `layout.EdgePathCalculator.contains(Edge, Point)`; `ui.DiagramCanvas.setLasso(Rectangle)`; `render.DiagramRenderer.draw(...)` (marcadores de seleção) |
 | RF33 Selecionar tudo | ✅ Implementado | `app.MainWindow.createEditMenu()` (Select All, Ctrl+A); `ui.DiagramTab.selectAll()`; `model.builder.DiagramBuilder.getAllElements()` (nós e arestas); `model.builder.DiagramBuilder.movableNodes(...)` (mover a seleção inteira) |
-| RF34 Recortar, copiar e colar | ⏳ Fase 6 | `ui.ElementClipboard`, `model.builder.DiagramBuilder` |
+| RF34 Recortar, copiar e colar | ✅ Implementado | `app.MainWindow.createEditMenu()` (Cut Ctrl+X, Copy Ctrl+C, Paste Ctrl+V); `ui.ElementClipboard` (compartilhado entre as abas); `ui.DiagramTab.copySelection(...)`, `cutSelection(...)`, `paste(...)` (recusa em sequência e elementos incompatíveis, com notificação); `model.builder.DiagramBuilder.copyFragment(...)`, `paste(...)`; `model.ElementCompatibility.accepts(DiagramType, DiagramElement)` |
 | RF35 Excluir elementos | ✅ Implementado | `app.MainWindow.createEditMenu()` (Delete, tecla Delete); `ui.DiagramTab.deleteSelection()`; `model.builder.DiagramBuilder.removeElements(...)`, `topmostNodes(...)`; `command.RemoveEdgeOperation`, `command.RemoveNodeOperation`, `command.CompoundOperation`; em sequência, `model.builder.SequenceDiagramBuilder.removeElements(...)` remove também as chamadas dependentes |
 
 ### 4.9 Visualização e interface
@@ -343,7 +355,7 @@ Caminhos abreviados: `app` = `br.uefs.umleditor.app`, `model` = `br.uefs.umledit
 |---|---|---|
 | RF36 Grade | ✅ Implementado | Exibição: `ui.DiagramCanvas.setShowGrid(boolean)`, `paintGrid(...)`, `app.UserPreferences.showGridProperty()`, `app.MainWindow.createViewMenu()`. Alinhamento, com a grade visível ou não: `layout.GridSnap.snap(double)`, `snap(Point)`, `GRID_SIZE`, usados em `model.builder.DiagramBuilder.createNode(...)` e `ui.CanvasController.dragNodes(Point)` |
 | RF37 Zoom | ✅ Implementado | `ui.DiagramCanvas.zoomIn()`, `zoomOut()`, `resetZoom()`, `getZoom()`, `canZoomIn()`, `canZoomOut()`; `app.MainWindow.createViewMenu()`, `zoom(Consumer<DiagramCanvas>)`, `updateZoomItems()` |
-| RF38 Tamanho do diagrama | 🟡 Parcial | Implementado: `ui.dialogs.DiagramSizeDialog`; `app.MainWindow.editDiagramSize()`; `app.UserPreferences.getDiagramWidth()`, `getDiagramHeight()`, `setDiagramSize(int, int)`, `getDefaultDiagramWidth()`, `getDefaultDiagramHeight()`; `model.Diagram.clampSize(int)`. Fase 6: aplicar aos arquivos abertos e ampliar o tamanho de diagramas maiores. |
+| RF38 Tamanho do diagrama | ✅ Implementado | `ui.dialogs.DiagramSizeDialog`; `app.MainWindow.editDiagramSize()`, `newDiagram(DiagramType)`, `fitSize(Diagram)` (arquivos abertos recebem o tamanho configurado, ampliado para comportar o conteúdo); `app.UserPreferences.getDiagramWidth()`, `getDiagramHeight()`, `setDiagramSize(int, int)`, `getDefaultDiagramWidth()`, `getDefaultDiagramHeight()`; `model.Diagram.clampSize(int)`; `export.DiagramImage.contentBounds(...)` |
 | RF39 Fonte | ✅ Implementado | `ui.dialogs.FontDialog`; `app.MainWindow.editFont()`; `app.UserPreferences.fontSettingsProperty()`; `render.FontSettings.defaults()`, `font(TextStyle)`; `render.RenderContext.setFontSettings(FontSettings)`, `measure(String, TextStyle)`; `ui.DiagramTab.setFontSettings(FontSettings)` |
 | RF40 Modo escuro | ✅ Implementado | `app.MainWindow.applyTheme()`, `applyStylesheets()`; `render.Theme.of(boolean)`; `ui.DiagramTab.setTheme(Theme)`; `ui.ToolPalette.setTheme(Theme)`; `render.RenderContext.setTheme(Theme)`; `dark.css`; `app.UserPreferences.darkModeProperty()` |
 
@@ -359,5 +371,5 @@ Caminhos abreviados: `app` = `br.uefs.umleditor.app`, `model` = `br.uefs.umledit
 | Requisito | Situação | Classes e métodos |
 |---|---|---|
 | RNF01 Desempenho | ✅ Implementado | `app.UserPreferences.getDefaultDiagramWidth()` e `getDefaultDiagramHeight()` (tamanho inicial proporcional à tela); `ui.DiagramCanvas.refresh()` (o canvas cobre só a área visível, não o diagrama inteiro) |
-| RNF02 Formato aberto | ⏳ Fase 6 | Formato documentado na seção 2 deste README; `persistence.DiagramSerializer`, `persistence.DiagramDeserializer` |
-| RNF03 Múltiplas formas de interação | 🟡 Parcial | Implementado: ferramentas por barra, atalho e menu de contexto (`ui.ToolPalette.selectTool(int)`, `ui.DiagramTab.handleToolShortcut(KeyEvent)`, `ui.ToolPalette.createContextMenu()`); zoom por menu e atalho (`app.MainWindow.createViewMenu()`); Select All e Delete por menu e teclado (`app.MainWindow.createEditMenu()`); seleção de nós e arestas por clique e por laço (`ui.CanvasController`). propriedades por duplo clique, Ctrl+Enter e Edit > Properties; desfazer e refazer por menu e atalho. Fase 6: cópia de imagem por menu/barra/Ctrl+B e as operações de arquivo. |
+| RNF02 Formato aberto | ✅ Implementado | Formato documentado na seção 2 deste README; `persistence.DiagramSerializer`, `persistence.DiagramDeserializer`, `persistence.json.JsonParser`, `persistence.json.JsonWriter` (JSON indentado, em UTF-8, legível por outras ferramentas) |
+| RNF03 Múltiplas formas de interação | ✅ Implementado | Ferramentas: barra, teclas 1–9/0/A… e menu de contexto (`ui.ToolPalette.selectTool(int)`, `ui.DiagramTab.handleToolShortcut(KeyEvent)`, `ui.ToolPalette.createContextMenu()`). Propriedades: duplo clique, Ctrl+Enter e Edit > Properties (`ui.CanvasController`, `app.MainWindow.createEditMenu()`). Cópia de imagem: menu, ferramenta To Clipboard e Ctrl+B (`ui.DiagramTab.copyImageToClipboard()`). Arquivos, edição e visualização: menu e atalho (`app.MainWindow.createFileMenu()`, `createEditMenu()`, `createViewMenu()`). Seleção: clique, Ctrl+clique, laço e Ctrl+A. Fechar aba: botão da aba e Ctrl+W. |
