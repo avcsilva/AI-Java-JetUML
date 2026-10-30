@@ -4,7 +4,7 @@ Editor desktop de diagramas UML (Class, Sequence, State, Object e Use Case) escr
 
 A especificação está em [REQUISITOS.md](REQUISITOS.md) e o plano de arquitetura e de fases está em [PLANO.md](PLANO.md).
 
-> **Estado atual:** a **Fase 1** (esqueleto da aplicação e área de trabalho) está implementada. As demais fases estão planejadas. A tabela de rastreabilidade (seção 4) indica, para cada requisito, se ele já foi implementado e onde, ou em qual fase será entregue.
+> **Estado atual:** as **Fases 1 e 2** estão implementadas: esqueleto da aplicação e área de trabalho; nós, renderização e seleção. As demais fases estão planejadas. A tabela de rastreabilidade (seção 4) indica, para cada requisito, se ele já foi implementado e onde, ou em qual fase será entregue.
 
 ---
 
@@ -59,16 +59,40 @@ mvn clean compile
 pom.xml
 src/main/java/br/uefs/umleditor/
   app/            UmlEditorApp, MainWindow, WelcomePane, UserPreferences
-  model/          Diagram, DiagramType, ToolType
-  render/         Theme
-  ui/             DiagramTab, DiagramCanvas, ToolPalette, ToolIconPainter, NotificationArea
-  ui/dialogs/     DiagramSizeDialog, NotificationDurationDialog, SpinnerSupport
+  geom/           Point, Rectangle, Dimension
+  model/          Diagram, DiagramType, ToolType, Node, NamedNode, ParentNode, BoundsCalculator
+  model/nodes/    ClassNode, InterfaceNode, PackageNode, PackageDescriptionNode, NoteNode,
+                  StateNode, InitialStateNode, FinalStateNode, ObjectNode, FieldNode,
+                  ActorNode, UseCaseNode, ImplicitParameterNode, NodeFactory
+  model/builder/  DiagramBuilder
+  command/        DiagramOperation, CompoundOperation, AddNodeOperation, RemoveNodeOperation,
+                  MoveNodesOperation, ReparentNodeOperation, UndoManager
+  layout/         GridSnap
+  render/         Theme, RenderContext, FontSettings, TextStyle, StyledText, TextBlock,
+                  GraphicsAdapter, FxGraphicsAdapter, LineStyle, DiagramRenderer
+  render/nodes/   NodeRenderer e um renderizador por família de nós
+  ui/             DiagramTab, DiagramCanvas, CanvasController, SelectionModel, ToolPalette,
+                  ToolIconPainter, NotificationArea
+  ui/dialogs/     DiagramSizeDialog, FontDialog, NotificationDurationDialog, SpinnerSupport
 src/main/resources/br/uefs/umleditor/
   base.css        aparência padrão (clara) e estilo das notificações
   dark.css        aparência do modo escuro
-src/test/java/br/uefs/umleditor/model/
-  DiagramTypeTest
+src/test/java/br/uefs/umleditor/
+  model/DiagramTypeTest, model/builder/DiagramBuilderTest, command/UndoManagerTest,
+  render/StyledTextTest
 ```
+
+### Como usar (funcionalidades disponíveis)
+
+- **Criar diagrama:** botões da tela de boas-vindas ou File > New.
+- **Escolher ferramenta:** clique na barra lateral, teclas `1`–`9`, `0`, `A`, `B`… ou clique direito no diagrama.
+- **Criar nó:** com uma ferramenta de nó ativa, clique em um espaço vazio. Clicar dentro de um pacote cria o nó como filho do pacote; com a ferramenta Field, clique dentro de um objeto para criar um campo. Clicar sobre outro nó não tem efeito.
+- **Selecionar:** com a ferramenta Select, clique em um elemento; `Ctrl`+clique adiciona ou remove da seleção; arrastar a partir de um espaço vazio desenha o laço, que seleciona os elementos inteiramente contidos nele. Edit > Select All (`Ctrl+A`) seleciona tudo.
+- **Mover:** arraste os elementos selecionados. A posição se alinha à grade de 10 px, com a grade visível ou não, e os elementos não saem da área do diagrama. Campos acompanham o objeto e não são movidos sozinhos.
+- **Pacotes:** com um nó selecionado posicionado sobre um pacote, pressione `Shift` para incluí-lo no pacote; com um filho de pacote selecionado, `Shift` o desanexa. O pacote se ajusta para conter os filhos.
+- **Excluir:** Edit > Delete (tecla `Delete`). Excluir um pacote ou objeto exclui também seus filhos.
+- **Formatação de texto:** uma linha escrita como `/texto/` aparece em itálico e `_texto_` aparece sublinhada (podem ser combinadas). A edição de texto chega com o painel de propriedades, na Fase 4.
+- **Fonte:** View > Change Font escolhe a família e o tamanho (8 a 36) do texto dos diagramas, com Restore Default.
 
 ---
 
@@ -202,7 +226,7 @@ Caminhos abreviados: `app` = `br.uefs.umleditor.app`, `model` = `br.uefs.umledit
 
 | Requisito | Situação | Classes e métodos |
 |---|---|---|
-| RF01 Criar novo diagrama | ✅ Implementado | `app.WelcomePane(Consumer<DiagramType>)`; `app.MainWindow.createFileMenu()` (File > New); `app.MainWindow.newDiagram(DiagramType)`; `app.MainWindow.showWelcomeIfEmpty()`; `model.DiagramType`; `model.Diagram(DiagramType, int, int)`; `ui.DiagramTab(Diagram, String, Theme, boolean)` |
+| RF01 Criar novo diagrama | ✅ Implementado | `app.WelcomePane(Consumer<DiagramType>)`; `app.MainWindow.createFileMenu()` (File > New); `app.MainWindow.newDiagram(DiagramType)`; `app.MainWindow.showWelcomeIfEmpty()`; `model.DiagramType`; `model.Diagram(DiagramType, int, int)`; `ui.DiagramTab(Diagram, String, RenderContext, boolean)` |
 | RF02 Abrir, salvar e fechar | ⏳ Fase 6 | `persistence.json.JsonParser`, `persistence.json.JsonWriter`, `persistence.DiagramSerializer`, `persistence.DiagramDeserializer`, `persistence.RecentFiles`, `model.rules.DiagramStructureValidator`, `app.MainWindow` (Open, Recent Files, Close, Save, Save As) |
 | RF03 Duplicar diagrama | ⏳ Fase 6 | `app.MainWindow` (File > Duplicate), `persistence.DiagramSerializer` |
 | RF04 Exportar como imagem | ⏳ Fase 6 | `export.ImageExporter`, `render.SvgGraphicsAdapter`, `render.DiagramPainter` |
@@ -222,11 +246,11 @@ Caminhos abreviados: `app` = `br.uefs.umleditor.app`, `model` = `br.uefs.umledit
 
 | Requisito | Situação | Classes e métodos |
 |---|---|---|
-| RF11 Criar nós | ⏳ Fase 2 | `model.nodes.*`, `model.builder.DiagramBuilder`, `ui.CanvasController`, `command.DiagramOperation` |
+| RF11 Criar nós | ✅ Implementado | `model.nodes.NodeFactory.create(ToolType)`; `model.builder.DiagramBuilder.createNode(Node, Point)`, `findNodeAt(Point)`, `keepInsideDiagram(Node)`; `command.AddNodeOperation`; `ui.CanvasController.mousePressed(MouseEvent)`, `createNode(Node, Point)`; `ui.DiagramTab.perform(DiagramOperation)` |
 | RF12 Edição automática de nós | ⏳ Fase 4 | `ui.PropertyEditor`, `app.UserPreferences` (Auto Edit Node), `ui.CanvasController` |
-| RF13 Criar notas | ⏳ Fase 2 | `model.nodes.NoteNode`, `render` (renderizador de nota) |
+| RF13 Criar notas | ✅ Implementado | `model.nodes.NoteNode`; `render.nodes.NoteNodeRenderer.getBounds(NoteNode)` e `draw(NoteNode, GraphicsAdapter)`; criação pela ferramenta Note (RF11), disponível em todos os tipos de diagrama |
 | RF14 Conectar notas | ⏳ Fase 3 | `model.edges.NoteEdge`, `model.nodes.PointNode`, `model.rules.CommonRules` |
-| RF15 Nós filhos em pacotes | ⏳ Fase 2 | `model.nodes.PackageNode`, `layout.PackageLayout`, `ui.CanvasController` (tecla Shift) |
+| RF15 Nós filhos em pacotes | ✅ Implementado | `model.ParentNode.canAccept(Node)`, `addChild(int, Node)`, `removeChild(Node)`; `model.nodes.PackageNode.canAccept(Node)`; `model.builder.DiagramBuilder.createNode(Node, Point)` (clique dentro do pacote), `toggleParent(Collection<Node>)`, `findPackageAt(Point, Node)`; `command.ReparentNodeOperation`; `ui.CanvasController.keyPressed(KeyEvent)` (tecla Shift); `render.nodes.PackageNodeRenderer.getBounds(NamedNode)` (o pacote se ajusta aos filhos); `render.DiagramRenderer.layout(Diagram)` |
 
 ### 4.4 Arestas, transições e validação
 
@@ -242,16 +266,16 @@ Caminhos abreviados: `app` = `br.uefs.umleditor.app`, `model` = `br.uefs.umledit
 
 | Requisito | Situação | Classes e métodos |
 |---|---|---|
-| RF21 Desfazer e refazer | ⏳ Fase 4 | `command.UndoManager`, `command.DiagramOperation`, `command.CompoundOperation` |
+| RF21 Desfazer e refazer | ⏳ Fase 4 | Já existem `command.UndoManager` (`execute`, `record`, `undo`, `redo`) e as operações reversíveis do pacote `command`, e as ações da Fase 2 já passam por `ui.DiagramTab.perform(DiagramOperation)` / `record(DiagramOperation)`. Faltam os itens Undo/Redo no menu Edit (Fase 4). |
 | RF22 Acessar propriedades | ⏳ Fase 4 | `ui.PropertyEditor`, `model.Property`, `model.PropertyKind` |
 | RF23 Estereótipos UML | ⏳ Fase 4 | `ui.PropertyEditor` (Ctrl+Q nos campos) |
-| RF24 Formatação de texto | ⏳ Fase 2 | `render.StyledText` |
+| RF24 Formatação de texto | ✅ Implementado | `render.StyledText.parse(String)`, `lines(String)`; `render.TextStyle.with(StyledLine)`; `render.TextBlock.measure(...)` e `draw(...)`; `render.FxGraphicsAdapter.drawText(...)` (itálico pela fonte, sublinhado desenhado sob o texto) |
 
 ### 4.6 Diagrama de objetos
 
 | Requisito | Situação | Classes e métodos |
 |---|---|---|
-| RF25 Criar campos | ⏳ Fase 2 | `model.nodes.FieldNode`, `model.nodes.ObjectNode`, `model.builder` (construtor do diagrama de objetos) |
+| RF25 Criar campos | 🟡 Parcial | Implementado: `model.nodes.FieldNode.requiresParent()`; `model.nodes.ObjectNode.canAccept(Node)`; `model.Diagram.addRootNode(int, Node)` (rejeita campo como raiz); `model.builder.DiagramBuilder.createRequiredChild(Node, Node)`; `render.nodes.ObjectNodeRenderer.getFieldBounds(ObjectNode, FieldNode)`; `render.nodes.FieldNodeRenderer`. Fase 4: edição de nome e valor pelas propriedades (Ctrl+Enter). |
 | RF26 Criar referências | ⏳ Fase 3 | `model.edges.ObjectReferenceEdge`, `model.rules.ObjectDiagramRules` |
 
 ### 4.7 Diagrama de sequência
@@ -268,20 +292,20 @@ Caminhos abreviados: `app` = `br.uefs.umleditor.app`, `model` = `br.uefs.umledit
 
 | Requisito | Situação | Classes e métodos |
 |---|---|---|
-| RF32 Seleção | ⏳ Fase 2 | `ui.SelectionModel`, `ui.CanvasController` (clique, Ctrl+clique, laço) |
-| RF33 Selecionar tudo | ⏳ Fase 2 | `ui.SelectionModel`, `app.MainWindow` (Edit > Select All) |
+| RF32 Seleção | ✅ Implementado | `ui.SelectionModel.set(Node)`, `toggle(Node)`, `setAll(...)`, `addAll(...)`, `clear()`; `ui.CanvasController.startSelection(Point, boolean)` (clique e Ctrl+clique), `mouseDragged(MouseEvent)` (laço); `model.builder.DiagramBuilder.findNodesInside(Rectangle)`; `ui.DiagramCanvas.setLasso(Rectangle)`; `render.DiagramRenderer.draw(...)` (marcadores de seleção) |
+| RF33 Selecionar tudo | ✅ Implementado | `app.MainWindow.createEditMenu()` (Select All, Ctrl+A); `ui.DiagramTab.selectAll()`; `model.Diagram.getAllNodes()`. As arestas passam a ser incluídas quando existirem (Fase 3). |
 | RF34 Recortar, copiar e colar | ⏳ Fase 6 | `ui.ElementClipboard`, `model.builder.DiagramBuilder` |
-| RF35 Excluir elementos | ⏳ Fase 2 | `model.builder.DiagramBuilder`, `app.MainWindow` (Edit > Delete) |
+| RF35 Excluir elementos | ✅ Implementado | `app.MainWindow.createEditMenu()` (Delete, tecla Delete); `ui.DiagramTab.deleteSelection()`; `model.builder.DiagramBuilder.removeNodes(Collection<Node>)`, `topmostNodes(Collection<Node>)`; `command.RemoveNodeOperation`, `command.CompoundOperation` |
 
 ### 4.9 Visualização e interface
 
 | Requisito | Situação | Classes e métodos |
 |---|---|---|
-| RF36 Grade | 🟡 Parcial | Implementado: `ui.DiagramCanvas.setShowGrid(boolean)`, `ui.DiagramCanvas.paintGrid(...)`, `ui.DiagramCanvas.GRID_SIZE`, `app.UserPreferences.showGridProperty()`, `app.MainWindow.createViewMenu()`. Fase 2: alinhamento à grade (`layout.GridSnap`). |
+| RF36 Grade | ✅ Implementado | Exibição: `ui.DiagramCanvas.setShowGrid(boolean)`, `paintGrid(...)`, `app.UserPreferences.showGridProperty()`, `app.MainWindow.createViewMenu()`. Alinhamento, com a grade visível ou não: `layout.GridSnap.snap(double)`, `snap(Point)`, `GRID_SIZE`, usados em `model.builder.DiagramBuilder.createNode(...)` e `ui.CanvasController.dragNodes(Point)` |
 | RF37 Zoom | ✅ Implementado | `ui.DiagramCanvas.zoomIn()`, `zoomOut()`, `resetZoom()`, `getZoom()`, `canZoomIn()`, `canZoomOut()`; `app.MainWindow.createViewMenu()`, `zoom(Consumer<DiagramCanvas>)`, `updateZoomItems()` |
 | RF38 Tamanho do diagrama | 🟡 Parcial | Implementado: `ui.dialogs.DiagramSizeDialog`; `app.MainWindow.editDiagramSize()`; `app.UserPreferences.getDiagramWidth()`, `getDiagramHeight()`, `setDiagramSize(int, int)`, `getDefaultDiagramWidth()`, `getDefaultDiagramHeight()`; `model.Diagram.clampSize(int)`. Fase 6: aplicar aos arquivos abertos e ampliar o tamanho de diagramas maiores. |
-| RF39 Fonte | ⏳ Fase 2 | `ui.dialogs.FontDialog`, `render.FontSettings` |
-| RF40 Modo escuro | ✅ Implementado | `app.MainWindow.applyTheme()`, `applyStylesheets()`; `render.Theme.of(boolean)`; `ui.DiagramTab.setTheme(Theme)`; `ui.ToolPalette.setTheme(Theme)`; `ui.DiagramCanvas.setTheme(Theme)`; `dark.css`; `app.UserPreferences.darkModeProperty()` |
+| RF39 Fonte | ✅ Implementado | `ui.dialogs.FontDialog`; `app.MainWindow.editFont()`; `app.UserPreferences.fontSettingsProperty()`; `render.FontSettings.defaults()`, `font(TextStyle)`; `render.RenderContext.setFontSettings(FontSettings)`, `measure(String, TextStyle)`; `ui.DiagramTab.setFontSettings(FontSettings)` |
+| RF40 Modo escuro | ✅ Implementado | `app.MainWindow.applyTheme()`, `applyStylesheets()`; `render.Theme.of(boolean)`; `ui.DiagramTab.setTheme(Theme)`; `ui.ToolPalette.setTheme(Theme)`; `render.RenderContext.setTheme(Theme)`; `dark.css`; `app.UserPreferences.darkModeProperty()` |
 
 ### 4.10 Notificações
 
@@ -296,4 +320,4 @@ Caminhos abreviados: `app` = `br.uefs.umleditor.app`, `model` = `br.uefs.umledit
 |---|---|---|
 | RNF01 Desempenho | ✅ Implementado | `app.UserPreferences.getDefaultDiagramWidth()` e `getDefaultDiagramHeight()` (tamanho inicial proporcional à tela); `ui.DiagramCanvas.refresh()` (o canvas cobre só a área visível, não o diagrama inteiro) |
 | RNF02 Formato aberto | ⏳ Fase 6 | Formato documentado na seção 2 deste README; `persistence.DiagramSerializer`, `persistence.DiagramDeserializer` |
-| RNF03 Múltiplas formas de interação | 🟡 Parcial | Implementado: ferramentas por barra, atalho e menu de contexto (`ui.ToolPalette.selectTool(int)`, `ui.DiagramTab.handleToolShortcut(KeyEvent)`, `ui.ToolPalette.createContextMenu()`); zoom por menu e atalho (`app.MainWindow.createViewMenu()`). Fases 2–6: propriedades por duplo clique/Ctrl+Enter/menu, cópia de imagem por menu/barra/Ctrl+B e as demais operações. |
+| RNF03 Múltiplas formas de interação | 🟡 Parcial | Implementado: ferramentas por barra, atalho e menu de contexto (`ui.ToolPalette.selectTool(int)`, `ui.DiagramTab.handleToolShortcut(KeyEvent)`, `ui.ToolPalette.createContextMenu()`); zoom por menu e atalho (`app.MainWindow.createViewMenu()`); Select All e Delete por menu e teclado (`app.MainWindow.createEditMenu()`). Fases 3–6: propriedades por duplo clique/Ctrl+Enter/menu, cópia de imagem por menu/barra/Ctrl+B e as demais operações. |
