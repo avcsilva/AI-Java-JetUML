@@ -1,6 +1,9 @@
 package br.uefs.umleditor.model.edges;
 
+import java.util.List;
+
 import br.uefs.umleditor.model.Edge;
+import br.uefs.umleditor.model.Property;
 
 /**
  * Structural relationship between classes, with start, middle and end labels
@@ -43,5 +46,14 @@ public abstract class ClassRelationshipEdge extends Edge {
 
     public void setDirectionality(Directionality directionality) {
         this.directionality = directionality;
+    }
+
+    @Override
+    public List<Property> getProperties() {
+        return List.of(Property.text("Start Label", this::getStartLabel, this::setStartLabel),
+                Property.text("Middle Label", this::getMiddleLabel, this::setMiddleLabel),
+                Property.text("End Label", this::getEndLabel, this::setEndLabel),
+                Property.choice("Directionality", List.of(Directionality.values()), this::getDirectionality,
+                        this::setDirectionality));
     }
 }

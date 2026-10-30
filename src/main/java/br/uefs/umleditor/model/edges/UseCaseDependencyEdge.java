@@ -1,6 +1,9 @@
 package br.uefs.umleditor.model.edges;
 
+import java.util.List;
+
 import br.uefs.umleditor.model.Edge;
+import br.uefs.umleditor.model.Property;
 
 /**
  * A dependency between use cases, which may be an include or an extend.
@@ -27,6 +30,11 @@ public class UseCaseDependencyEdge extends Edge {
             return displayName;
         }
 
+        @Override
+        public String toString() {
+            return displayName;
+        }
+
         public String getStereotype() {
             return stereotype;
         }
@@ -44,5 +52,10 @@ public class UseCaseDependencyEdge extends Edge {
 
     public void setType(Type type) {
         this.type = type;
+    }
+
+    @Override
+    public List<Property> getProperties() {
+        return List.of(Property.choice("Dependency Type", List.of(Type.values()), this::getType, this::setType));
     }
 }

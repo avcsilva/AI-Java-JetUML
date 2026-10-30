@@ -76,6 +76,8 @@ public class MainWindow {
                 tab -> tab.getToolPalette().setShowToolHint(preferences.showToolHintProperty().get())));
         preferences.verboseTooltipsProperty().addListener(observable -> forEachDiagramTab(
                 tab -> tab.getToolPalette().setVerboseTooltips(preferences.verboseTooltipsProperty().get())));
+        preferences.autoEditNodeProperty().addListener(observable -> forEachDiagramTab(
+                tab -> tab.setAutoEditNode(preferences.autoEditNodeProperty().get())));
         preferences.fontSettingsProperty().addListener(observable -> forEachDiagramTab(
                 tab -> tab.setFontSettings(preferences.fontSettingsProperty().get())));
 
@@ -106,19 +108,30 @@ public class MainWindow {
     }
 
     private Menu createEditMenu() {
+        MenuItem undo = new MenuItem("Undo");
+        undo.setAccelerator(new KeyCodeCombination(KeyCode.Z, KeyCombination.SHORTCUT_DOWN));
+        undo.setOnAction(event -> currentDiagramTab().ifPresent(DiagramTab::undo));
+        MenuItem redo = new MenuItem("Redo");
+        redo.setAccelerator(new KeyCodeCombination(KeyCode.Y, KeyCombination.SHORTCUT_DOWN));
+        redo.setOnAction(event -> currentDiagramTab().ifPresent(DiagramTab::redo));
         MenuItem selectAll = new MenuItem("Select All");
         selectAll.setAccelerator(new KeyCodeCombination(KeyCode.A, KeyCombination.SHORTCUT_DOWN));
         selectAll.setOnAction(event -> currentDiagramTab().ifPresent(DiagramTab::selectAll));
         MenuItem delete = new MenuItem("Delete");
         delete.setAccelerator(new KeyCodeCombination(KeyCode.DELETE));
         delete.setOnAction(event -> currentDiagramTab().ifPresent(DiagramTab::deleteSelection));
-        return new Menu("Edit", null, selectAll, delete);
+        MenuItem properties = new MenuItem("Properties");
+        properties.setAccelerator(new KeyCodeCombination(KeyCode.ENTER, KeyCombination.SHORTCUT_DOWN));
+        properties.setOnAction(event -> currentDiagramTab().ifPresent(DiagramTab::editSelectedProperties));
+        return new Menu("Edit", null, undo, redo, new SeparatorMenuItem(), selectAll, delete,
+                new SeparatorMenuItem(), properties);
     }
 
     private Menu createViewMenu() {
         CheckMenuItem showGrid = checkItem("Show Grid", preferences.showGridProperty());
         CheckMenuItem showToolHint = checkItem("Show Tool Hint", preferences.showToolHintProperty());
         CheckMenuItem verboseTooltips = checkItem("Verbose Tooltips", preferences.verboseTooltipsProperty());
+        CheckMenuItem autoEditNode = checkItem("Auto Edit Node", preferences.autoEditNodeProperty());
 
         zoomInItem = new MenuItem("Zoom In");
         zoomInItem.setAccelerator(new KeyCodeCombination(KeyCode.EQUALS, KeyCombination.SHORTCUT_DOWN));
@@ -138,7 +151,7 @@ public class MainWindow {
         MenuItem notificationDuration = new MenuItem("Notification Duration...");
         notificationDuration.setOnAction(event -> editNotificationDuration());
 
-        return new Menu("View", null, showGrid, showToolHint, verboseTooltips, new SeparatorMenuItem(),
+        return new Menu("View", null, showGrid, showToolHint, verboseTooltips, autoEditNode, new SeparatorMenuItem(),
                 zoomInItem, zoomOutItem, resetZoomItem, new SeparatorMenuItem(),
                 diagramSize, changeFont, darkMode, notificationDuration);
     }
@@ -159,6 +172,7 @@ public class MainWindow {
                 preferences.showGridProperty().get(), notificationArea::showError);
         tab.getToolPalette().setShowToolHint(preferences.showToolHintProperty().get());
         tab.getToolPalette().setVerboseTooltips(preferences.verboseTooltipsProperty().get());
+        tab.setAutoEditNode(preferences.autoEditNodeProperty().get());
         tabPane.getTabs().remove(welcomeTab);
         tabPane.getTabs().add(tab);
         tabPane.getSelectionModel().select(tab);

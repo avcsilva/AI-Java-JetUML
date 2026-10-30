@@ -15,6 +15,7 @@ import br.uefs.umleditor.model.ToolType;
 import br.uefs.umleditor.model.builder.DiagramBuilder;
 import br.uefs.umleditor.model.edges.EdgeFactory;
 import br.uefs.umleditor.model.nodes.NodeFactory;
+import javafx.application.Platform;
 import javafx.scene.input.KeyCode;
 import javafx.scene.input.KeyEvent;
 import javafx.scene.input.MouseButton;
@@ -22,9 +23,10 @@ import javafx.scene.input.MouseEvent;
 
 /**
  * Handles mouse and keyboard gestures on the drawing area: node creation
- * (RF11), edge creation with a rubber band line (RF16), selection by click,
- * Ctrl+click and lasso (RF32), moving nodes with grid snapping (RF36) and
- * attaching or detaching nodes with Shift (RF15).
+ * (RF11), opening the properties panel after creation (RF12) or by double
+ * click (RF22), edge creation with a rubber band line (RF16), selection by
+ * click, Ctrl+click and lasso (RF32), moving nodes with grid snapping (RF36)
+ * and attaching or detaching nodes with Shift (RF15).
  */
 public class CanvasController {
 
@@ -70,9 +72,15 @@ public class CanvasController {
             return;
         }
         canvas.getCanvas().requestFocus();
+        resetGesture();
         Point point = canvas.toDiagramPoint(event);
         ToolType tool = palette.getSelectedTool();
-        if (tool == ToolType.SELECT) {
+        if (tool == ToolType.SELECT && event.getClickCount() == 2) {
+            builder.findElementAt(point).ifPresent(element -> {
+                selection.set(element);
+                Platform.runLater(() -> tab.editProperties(element));
+            });
+        } else if (tool == ToolType.SELECT) {
             startSelection(point, event.isShortcutDown());
         } else {
             NodeFactory.create(tool).ifPresent(node -> createNode(node, point));
@@ -85,7 +93,23 @@ public class CanvasController {
         builder.createNode(node, point).ifPresent(operation -> {
             tab.perform(operation);
             selection.set(node);
+            if (tab.isAutoEditNode()) {
+                Platform.runLater(() -> tab.editProperties(node));
+            }
         });
+    }
+
+    /**
+     * Forgets any gesture left unfinished, for instance when a panel opened
+     * before the mouse button was released.
+     */
+    private void resetGesture() {
+        dragStart = null;
+        draggedNodes = List.of();
+        lassoStart = null;
+        newEdge = null;
+        canvas.setLasso(null);
+        canvas.setRubberBand(null, null);
     }
 
     private void startEdge(Edge edge, Point point) {

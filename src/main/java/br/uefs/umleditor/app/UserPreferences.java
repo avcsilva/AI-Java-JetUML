@@ -25,6 +25,7 @@ public class UserPreferences {
     private static final String SHOW_TOOL_HINT = "showToolHint";
     private static final String VERBOSE_TOOLTIPS = "verboseTooltips";
     private static final String DARK_MODE = "darkMode";
+    private static final String AUTO_EDIT_NODE = "autoEditNode";
     private static final String NOTIFICATION_DURATION = "notificationDuration";
     private static final String DIAGRAM_WIDTH = "diagramWidth";
     private static final String DIAGRAM_HEIGHT = "diagramHeight";
@@ -37,6 +38,7 @@ public class UserPreferences {
     private final BooleanProperty showToolHint = booleanSetting(SHOW_TOOL_HINT, false);
     private final BooleanProperty verboseTooltips = booleanSetting(VERBOSE_TOOLTIPS, false);
     private final BooleanProperty darkMode = booleanSetting(DARK_MODE, false);
+    private final BooleanProperty autoEditNode = booleanSetting(AUTO_EDIT_NODE, false);
     private final IntegerProperty notificationDuration =
             integerSetting(NOTIFICATION_DURATION, DEFAULT_NOTIFICATION_DURATION);
     private final ObjectProperty<FontSettings> fontSettings = fontSetting();
@@ -78,6 +80,13 @@ public class UserPreferences {
 
     public BooleanProperty darkModeProperty() {
         return darkMode;
+    }
+
+    /**
+     * @return whether the properties panel opens when a node is created (RF12).
+     */
+    public BooleanProperty autoEditNodeProperty() {
+        return autoEditNode;
     }
 
     /**

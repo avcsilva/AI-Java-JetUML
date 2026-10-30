@@ -8,6 +8,7 @@ import br.uefs.umleditor.render.DiagramRenderer;
 import br.uefs.umleditor.render.FxGraphicsAdapter;
 import br.uefs.umleditor.render.Theme;
 import javafx.geometry.Bounds;
+import javafx.geometry.Point2D;
 import javafx.scene.canvas.Canvas;
 import javafx.scene.canvas.GraphicsContext;
 import javafx.scene.control.ScrollPane;
@@ -67,6 +68,14 @@ public class DiagramCanvas extends ScrollPane {
     public Point toDiagramPoint(MouseEvent event) {
         double zoom = getZoom();
         return new Point((event.getX() + canvas.getLayoutX()) / zoom, (event.getY() + canvas.getLayoutY()) / zoom);
+    }
+
+    /**
+     * @return the screen position of a point of the diagram, or null if the canvas is not shown
+     */
+    public Point2D toScreen(Point point) {
+        double zoom = getZoom();
+        return canvas.localToScreen(point.x() * zoom - canvas.getLayoutX(), point.y() * zoom - canvas.getLayoutY());
     }
 
     /**

@@ -1,6 +1,9 @@
 package br.uefs.umleditor.model.edges;
 
+import java.util.List;
+
 import br.uefs.umleditor.model.Edge;
+import br.uefs.umleditor.model.Property;
 
 /**
  * An edge with a middle label, such as a state transition or an object
@@ -16,5 +19,10 @@ public abstract class LabeledEdge extends Edge {
 
     public void setMiddleLabel(String middleLabel) {
         this.middleLabel = middleLabel == null ? "" : middleLabel;
+    }
+
+    @Override
+    public List<Property> getProperties() {
+        return List.of(Property.text("Middle Label", this::getMiddleLabel, this::setMiddleLabel));
     }
 }

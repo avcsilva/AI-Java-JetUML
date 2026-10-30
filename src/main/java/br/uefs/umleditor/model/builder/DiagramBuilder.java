@@ -113,6 +113,13 @@ public class DiagramBuilder {
     }
 
     /**
+     * @return the area covered by a node or by the path of an edge
+     */
+    public Rectangle getElementBounds(DiagramElement element) {
+        return element instanceof Edge edge ? paths.getBounds(edge) : bounds.getBounds((Node) element);
+    }
+
+    /**
      * @return every selectable element of the diagram (RF33)
      */
     public List<DiagramElement> getAllElements() {

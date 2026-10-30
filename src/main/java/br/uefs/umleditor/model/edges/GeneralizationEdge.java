@@ -1,6 +1,9 @@
 package br.uefs.umleditor.model.edges;
 
+import java.util.List;
+
 import br.uefs.umleditor.model.Edge;
+import br.uefs.umleditor.model.Property;
 
 /**
  * A generalization of a class diagram: inheritance or realization of an
@@ -24,6 +27,11 @@ public class GeneralizationEdge extends Edge {
         public String getDisplayName() {
             return displayName;
         }
+
+        @Override
+        public String toString() {
+            return displayName;
+        }
     }
 
     private Type type;
@@ -38,5 +46,10 @@ public class GeneralizationEdge extends Edge {
 
     public void setType(Type type) {
         this.type = type;
+    }
+
+    @Override
+    public List<Property> getProperties() {
+        return List.of(Property.choice("Generalization Type", List.of(Type.values()), this::getType, this::setType));
     }
 }

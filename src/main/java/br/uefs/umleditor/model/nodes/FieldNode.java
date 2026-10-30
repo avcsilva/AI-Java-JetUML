@@ -1,6 +1,9 @@
 package br.uefs.umleditor.model.nodes;
 
+import java.util.List;
+
 import br.uefs.umleditor.model.NamedNode;
+import br.uefs.umleditor.model.Property;
 
 /**
  * A field of an object, with name and value. A field always belongs to an
@@ -21,5 +24,11 @@ public class FieldNode extends NamedNode {
     @Override
     public boolean requiresParent() {
         return true;
+    }
+
+    @Override
+    public List<Property> getProperties() {
+        return List.of(Property.text("Name", this::getName, this::setName),
+                Property.text("Value", this::getValue, this::setValue));
     }
 }

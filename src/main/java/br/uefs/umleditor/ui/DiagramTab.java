@@ -1,16 +1,21 @@
 package br.uefs.umleditor.ui;
 
+import java.util.List;
 import java.util.function.Consumer;
 
 import br.uefs.umleditor.command.DiagramOperation;
 import br.uefs.umleditor.command.UndoManager;
+import br.uefs.umleditor.geom.Point;
+import br.uefs.umleditor.geom.Rectangle;
 import br.uefs.umleditor.model.Diagram;
+import br.uefs.umleditor.model.DiagramElement;
 import br.uefs.umleditor.model.ToolType;
 import br.uefs.umleditor.model.builder.DiagramBuilder;
 import br.uefs.umleditor.render.DiagramRenderer;
 import br.uefs.umleditor.render.FontSettings;
 import br.uefs.umleditor.render.RenderContext;
 import br.uefs.umleditor.render.Theme;
+import javafx.geometry.Point2D;
 import javafx.scene.control.ContextMenu;
 import javafx.scene.control.ScrollPane;
 import javafx.scene.control.Tab;
@@ -32,6 +37,7 @@ public class DiagramTab extends Tab {
     private final DiagramCanvas diagramCanvas;
     private final Consumer<String> errorReporter;
     private ContextMenu contextMenu;
+    private boolean autoEditNode;
 
     /**
      * @param errorReporter shows error notifications to the user (RF41)
@@ -98,6 +104,66 @@ public class DiagramTab extends Tab {
      */
     public void record(DiagramOperation operation) {
         undoManager.record(operation);
+    }
+
+    /**
+     * Edit > Undo: reverts the last action (RF21).
+     */
+    public void undo() {
+        undoManager.undo();
+        keepExistingSelection();
+        diagramCanvas.refresh();
+    }
+
+    /**
+     * Edit > Redo: applies again the last undone action (RF21).
+     */
+    public void redo() {
+        undoManager.redo();
+        keepExistingSelection();
+        diagramCanvas.refresh();
+    }
+
+    private void keepExistingSelection() {
+        List<DiagramElement> existing = builder.getAllElements();
+        selection.setAll(selection.getSelected().stream().filter(existing::contains).toList());
+    }
+
+    /**
+     * Edit > Properties (Ctrl+Enter): edits the selected element, when exactly one is selected (RF22).
+     */
+    public void editSelectedProperties() {
+        List<DiagramElement> selected = selection.getSelected();
+        if (selected.size() == 1) {
+            editProperties(selected.get(0));
+        }
+    }
+
+    /**
+     * Opens the properties panel of the element next to it (RF22). All the
+     * changes made while the panel is open are undone as one action.
+     */
+    public void editProperties(DiagramElement element) {
+        if (element.getProperties().isEmpty() || getTabPane() == null) {
+            return;
+        }
+        Rectangle area = builder.getElementBounds(element);
+        Point2D anchor = diagramCanvas.toScreen(new Point(area.maxX() + 10, area.y()));
+        var scene = getTabPane().getScene();
+        PropertyEditor.edit(element, scene.getWindow(), anchor, scene.getStylesheets(), diagramCanvas::refresh)
+                .ifPresent(this::record);
+        diagramCanvas.refresh();
+    }
+
+    public boolean isAutoEditNode() {
+        return autoEditNode;
+    }
+
+    /**
+     * View > Auto Edit Node: opens the properties panel whenever a node is created (RF12).
+     */
+    public void setAutoEditNode(boolean autoEditNode) {
+        this.autoEditNode = autoEditNode;
     }
 
     /**
