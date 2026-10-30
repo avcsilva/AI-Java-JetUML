@@ -4,7 +4,7 @@ Editor desktop de diagramas UML (Class, Sequence, State, Object e Use Case) escr
 
 A especificação está em [REQUISITOS.md](REQUISITOS.md) e o plano de arquitetura e de fases está em [PLANO.md](PLANO.md).
 
-> **Estado atual:** as **Fases 1 e 2** estão implementadas: esqueleto da aplicação e área de trabalho; nós, renderização e seleção. As demais fases estão planejadas. A tabela de rastreabilidade (seção 4) indica, para cada requisito, se ele já foi implementado e onde, ou em qual fase será entregue.
+> **Estado atual:** as **Fases 1, 2 e 3** estão implementadas: esqueleto da aplicação e área de trabalho; nós, renderização e seleção; arestas, layout automático e validação das conexões (exceto chamadas e retornos do diagrama de sequência). As demais fases estão planejadas. A tabela de rastreabilidade (seção 4) indica, para cada requisito, se ele já foi implementado e onde, ou em qual fase será entregue.
 
 ---
 
@@ -60,16 +60,26 @@ pom.xml
 src/main/java/br/uefs/umleditor/
   app/            UmlEditorApp, MainWindow, WelcomePane, UserPreferences
   geom/           Point, Rectangle, Dimension
-  model/          Diagram, DiagramType, ToolType, Node, NamedNode, ParentNode, BoundsCalculator
+  model/          Diagram, DiagramType, ToolType, DiagramElement, Node, NamedNode, ParentNode,
+                  Edge, BoundsCalculator
   model/nodes/    ClassNode, InterfaceNode, PackageNode, PackageDescriptionNode, NoteNode,
-                  StateNode, InitialStateNode, FinalStateNode, ObjectNode, FieldNode,
+                  PointNode, StateNode, InitialStateNode, FinalStateNode, ObjectNode, FieldNode,
                   ActorNode, UseCaseNode, ImplicitParameterNode, NodeFactory
+  model/edges/    DependencyEdge, GeneralizationEdge, AssociationEdge, AggregationEdge,
+                  ClassRelationshipEdge, Directionality, NoteEdge, StateTransitionEdge,
+                  ObjectReferenceEdge, ObjectCollaborationEdge, LabeledEdge,
+                  UseCaseAssociationEdge, UseCaseDependencyEdge, UseCaseGeneralizationEdge,
+                  EdgeFactory
+  model/rules/    DiagramRules, ClassDiagramRules, StateDiagramRules, ObjectDiagramRules,
+                  UseCaseDiagramRules, SequenceDiagramRules, ValidationResult
   model/builder/  DiagramBuilder
   command/        DiagramOperation, CompoundOperation, AddNodeOperation, RemoveNodeOperation,
-                  MoveNodesOperation, ReparentNodeOperation, UndoManager
-  layout/         GridSnap
+                  MoveNodesOperation, ReparentNodeOperation, AddEdgeOperation,
+                  RemoveEdgeOperation, UndoManager
+  layout/         GridSnap, EdgePathCalculator
   render/         Theme, RenderContext, FontSettings, TextStyle, StyledText, TextBlock,
-                  GraphicsAdapter, FxGraphicsAdapter, LineStyle, DiagramRenderer
+                  GraphicsAdapter, FxGraphicsAdapter, LineStyle, ArrowHead, EdgeRenderer,
+                  DiagramRenderer
   render/nodes/   NodeRenderer e um renderizador por família de nós
   ui/             DiagramTab, DiagramCanvas, CanvasController, SelectionModel, ToolPalette,
                   ToolIconPainter, NotificationArea
@@ -78,8 +88,8 @@ src/main/resources/br/uefs/umleditor/
   base.css        aparência padrão (clara) e estilo das notificações
   dark.css        aparência do modo escuro
 src/test/java/br/uefs/umleditor/
-  model/DiagramTypeTest, model/builder/DiagramBuilderTest, command/UndoManagerTest,
-  render/StyledTextTest
+  model/DiagramTypeTest, model/builder/DiagramBuilderTest, model/rules/EdgeRulesTest,
+  command/UndoManagerTest, layout/EdgePathCalculatorTest, render/StyledTextTest
 ```
 
 ### Como usar (funcionalidades disponíveis)
@@ -87,12 +97,28 @@ src/test/java/br/uefs/umleditor/
 - **Criar diagrama:** botões da tela de boas-vindas ou File > New.
 - **Escolher ferramenta:** clique na barra lateral, teclas `1`–`9`, `0`, `A`, `B`… ou clique direito no diagrama.
 - **Criar nó:** com uma ferramenta de nó ativa, clique em um espaço vazio. Clicar dentro de um pacote cria o nó como filho do pacote; com a ferramenta Field, clique dentro de um objeto para criar um campo. Clicar sobre outro nó não tem efeito.
-- **Selecionar:** com a ferramenta Select, clique em um elemento; `Ctrl`+clique adiciona ou remove da seleção; arrastar a partir de um espaço vazio desenha o laço, que seleciona os elementos inteiramente contidos nele. Edit > Select All (`Ctrl+A`) seleciona tudo.
+- **Criar aresta:** com uma ferramenta de aresta ativa, pressione o botão sobre o nó de origem, arraste a linha elástica e solte sobre o nó de destino. Arrastar dentro de um mesmo nó cria uma autoaresta, quando o tipo permite. Soltar em espaço vazio não tem efeito. Conexões inválidas não alteram o diagrama e aparecem como notificação de erro em vermelho.
+- **Note Connector:** arraste de um elemento até uma nota para ligá-los; arraste de uma nota até um espaço vazio para ancorar a extremidade naquele ponto fixo.
+- **Reference (diagrama de objetos):** arraste a partir da parte Value de um campo (à direita do `=`) até o objeto de destino.
+- **Caminho das arestas:** é calculado automaticamente e acompanha os nós quando eles são movidos; para mudar o caminho, mova os nós.
+- **Selecionar:** com a ferramenta Select, clique em um elemento (nó ou aresta); `Ctrl`+clique adiciona ou remove da seleção; arrastar a partir de um espaço vazio desenha o laço, que seleciona os elementos inteiramente contidos nele. Edit > Select All (`Ctrl+A`) seleciona tudo.
 - **Mover:** arraste os elementos selecionados. A posição se alinha à grade de 10 px, com a grade visível ou não, e os elementos não saem da área do diagrama. Campos acompanham o objeto e não são movidos sozinhos.
 - **Pacotes:** com um nó selecionado posicionado sobre um pacote, pressione `Shift` para incluí-lo no pacote; com um filho de pacote selecionado, `Shift` o desanexa. O pacote se ajusta para conter os filhos.
-- **Excluir:** Edit > Delete (tecla `Delete`). Excluir um pacote ou objeto exclui também seus filhos.
+- **Excluir:** Edit > Delete (tecla `Delete`). Excluir um nó exclui também seus filhos e as arestas ligadas a eles.
 - **Formatação de texto:** uma linha escrita como `/texto/` aparece em itálico e `_texto_` aparece sublinhada (podem ser combinadas). A edição de texto chega com o painel de propriedades, na Fase 4.
 - **Fonte:** View > Change Font escolhe a família e o tamanho (8 a 36) do texto dos diagramas, com Restore Default.
+
+### Regras de conexão
+
+| Diagrama | Arestas e extremidades aceitas | Rejeitado com notificação de erro |
+|---|---|---|
+| Todos | Note Connector: de qualquer elemento até uma nota, ou de uma nota até um ponto vazio | Ligação que não envolva nota dessa forma; conector repetido |
+| Classes | Dependency: classes, interfaces e pacotes. Inheritance, Realization, Association, Aggregation e Composition: classes e interfaces | Aresta repetida (mesmo tipo, origem e destino); ciclo direto de Herança, Realização, Dependência, Agregação/Composição ou Associação; Associação e Agregação/Composição entre as mesmas duas classes; auto-herança, autorrealização e autodependência |
+| Estados | Transition entre estados | Transição partindo de Estado Final ou chegando em Estado Inicial; mais de 2 autotransições por nó; mais de 2 transições na mesma direção entre dois nós |
+| Objetos | Reference: da parte Value de um campo até um objeto. Collaboration: entre objetos | Referência fora da parte Value; aresta repetida; ciclo de colaboração; autocolaboração |
+| Casos de uso | Association: atores e casos de uso. Include/Extend: casos de uso. Generalization: dois atores ou dois casos de uso | Aresta repetida; qualquer autoaresta |
+
+"Mesmo tipo" significa a mesma classe de aresta do modelo: Inheritance e Realization são ambas `GeneralizationEdge`, Aggregation e Composition são ambas `AggregationEdge`, e Include e Extend são ambas `UseCaseDependencyEdge`, pois o tipo de cada uma pode ser trocado nas propriedades (RF20). Por isso, por exemplo, não é possível ter uma Aggregation e uma Composition da mesma classe A para a mesma classe B.
 
 ---
 
@@ -249,18 +275,18 @@ Caminhos abreviados: `app` = `br.uefs.umleditor.app`, `model` = `br.uefs.umledit
 | RF11 Criar nós | ✅ Implementado | `model.nodes.NodeFactory.create(ToolType)`; `model.builder.DiagramBuilder.createNode(Node, Point)`, `findNodeAt(Point)`, `keepInsideDiagram(Node)`; `command.AddNodeOperation`; `ui.CanvasController.mousePressed(MouseEvent)`, `createNode(Node, Point)`; `ui.DiagramTab.perform(DiagramOperation)` |
 | RF12 Edição automática de nós | ⏳ Fase 4 | `ui.PropertyEditor`, `app.UserPreferences` (Auto Edit Node), `ui.CanvasController` |
 | RF13 Criar notas | ✅ Implementado | `model.nodes.NoteNode`; `render.nodes.NoteNodeRenderer.getBounds(NoteNode)` e `draw(NoteNode, GraphicsAdapter)`; criação pela ferramenta Note (RF11), disponível em todos os tipos de diagrama |
-| RF14 Conectar notas | ⏳ Fase 3 | `model.edges.NoteEdge`, `model.nodes.PointNode`, `model.rules.CommonRules` |
-| RF15 Nós filhos em pacotes | ✅ Implementado | `model.ParentNode.canAccept(Node)`, `addChild(int, Node)`, `removeChild(Node)`; `model.nodes.PackageNode.canAccept(Node)`; `model.builder.DiagramBuilder.createNode(Node, Point)` (clique dentro do pacote), `toggleParent(Collection<Node>)`, `findPackageAt(Point, Node)`; `command.ReparentNodeOperation`; `ui.CanvasController.keyPressed(KeyEvent)` (tecla Shift); `render.nodes.PackageNodeRenderer.getBounds(NamedNode)` (o pacote se ajusta aos filhos); `render.DiagramRenderer.layout(Diagram)` |
+| RF14 Conectar notas | ✅ Implementado | `model.edges.NoteEdge`; `model.nodes.PointNode`; `model.rules.DiagramRules.check(...)` e `checkNoteEdge(...)`; `model.builder.DiagramBuilder.createEdge(Edge, Point, Point)` e `createPoint(Point)` (âncora em ponto fixo); `layout.EdgePathCalculator.getPath(Edge)` (a conexão acompanha a nota); `render.nodes.PointNodeRenderer`; `model.builder.DiagramBuilder.removeElements(...)` (o ponto é removido com o conector) |
+| RF15 Nós filhos em pacotes | ✅ Implementado | `model.ParentNode.canAccept(Node)`, `addChild(int, Node)`, `removeChild(Node)`; `model.nodes.PackageNode.canAccept(Node)`; `model.builder.DiagramBuilder.createNode(Node, Point)` (clique dentro do pacote), `toggleParent(...)`, `findPackageAt(Point, Node)`; `command.ReparentNodeOperation`; `ui.CanvasController.keyPressed(KeyEvent)` (tecla Shift); `render.nodes.PackageNodeRenderer.getBounds(NamedNode)` (o pacote se ajusta aos filhos); `render.DiagramRenderer.layout(Diagram)` |
 
 ### 4.4 Arestas, transições e validação
 
 | Requisito | Situação | Classes e métodos |
 |---|---|---|
-| RF16 Criar arestas | ⏳ Fase 3 | `ui.CanvasController` (rubber band), `model.builder.DiagramBuilder`, `model.edges.*` |
-| RF17 Layout automático | ⏳ Fase 3 | `layout.EdgePathCalculator` |
-| RF18 Validação das conexões | ⏳ Fase 3 | `model.rules.ValidationResult`, `model.rules.ClassDiagramRules`, `ObjectDiagramRules`, `UseCaseDiagramRules`, `StateDiagramRules`, `CommonRules`; `ui.NotificationArea.showError(String)` |
-| RF19 Autoarestas e transições | ⏳ Fase 3 | `model.rules.ClassDiagramRules`, `UseCaseDiagramRules`, `ObjectDiagramRules`, `StateDiagramRules` |
-| RF20 Propriedades das arestas | ⏳ Fase 4 | `ui.PropertyEditor`, `model.Property`, `model.edges.*` |
+| RF16 Criar arestas | ✅ Implementado | `model.edges.EdgeFactory.create(ToolType)`; `ui.CanvasController.startEdge(Edge, Point)`, `mouseDragged(MouseEvent)`, `finishEdge(Point)`; `ui.DiagramCanvas.setRubberBand(Point, Point)` (linha elástica); `model.builder.DiagramBuilder.createEdge(Edge, Point, Point)`; `command.AddEdgeOperation`; `model.Diagram.addEdge(...)` |
+| RF17 Layout automático | ✅ Implementado | `layout.EdgePathCalculator.getPath(Edge)`, `betweenNodes(Edge)` (segmentos entre as bordas, arestas paralelas afastadas, transições opostas em arco), `selfLoop(Edge)`, `referencePath(FieldNode, Node)`, `exitPoint(...)`; `render.EdgeRenderer.draw(Edge, List<Point>, GraphicsAdapter)`; `render.ArrowHead.draw(...)`. O caminho não é armazenado: é recalculado a cada desenho a partir da posição dos nós. |
+| RF18 Validação das conexões | ✅ Implementado | `model.rules.DiagramRules.forType(DiagramType)`, `check(Diagram, Edge, Node, Node)`; `model.rules.ClassDiagramRules.checkEdge(...)` (duplicidade, ciclos diretos, Associação + Agregação); `model.rules.ObjectDiagramRules.checkEdge(...)` (ciclos de colaboração); `model.rules.UseCaseDiagramRules`; `model.rules.ValidationResult`; `ui.CanvasController.finishEdge(Point)` → `ui.DiagramTab.reportError(String)` → `ui.NotificationArea.showError(String)` |
+| RF19 Autoarestas e transições | ✅ Implementado | `model.builder.DiagramBuilder.createEdge(...)` (arraste dentro do mesmo nó); `model.rules.ClassDiagramRules.checkEdge(...)` (auto-herança e autodependência); `model.rules.UseCaseDiagramRules.checkEdge(...)`; `model.rules.ObjectDiagramRules.checkEdge(...)` (autocolaboração); `model.rules.StateDiagramRules.checkEdge(...)` e `MAX_TRANSITIONS_PER_DIRECTION`; `layout.EdgePathCalculator.selfLoop(Edge)` |
+| RF20 Propriedades das arestas | ⏳ Fase 4 | As propriedades já existem no modelo e no desenho: `model.edges.ClassRelationshipEdge` (rótulos e `Directionality`), `AggregationEdge.Type`, `GeneralizationEdge.Type`, `DependencyEdge.getDirectionality()`, `LabeledEdge.getMiddleLabel()`, `UseCaseDependencyEdge.Type`; `render.EdgeRenderer.appearanceOf(Edge)`. Falta editá-las no painel de propriedades (`ui.PropertyEditor`, Fase 4). |
 
 ### 4.5 Edição, propriedades e texto
 
@@ -276,7 +302,7 @@ Caminhos abreviados: `app` = `br.uefs.umleditor.app`, `model` = `br.uefs.umledit
 | Requisito | Situação | Classes e métodos |
 |---|---|---|
 | RF25 Criar campos | 🟡 Parcial | Implementado: `model.nodes.FieldNode.requiresParent()`; `model.nodes.ObjectNode.canAccept(Node)`; `model.Diagram.addRootNode(int, Node)` (rejeita campo como raiz); `model.builder.DiagramBuilder.createRequiredChild(Node, Node)`; `render.nodes.ObjectNodeRenderer.getFieldBounds(ObjectNode, FieldNode)`; `render.nodes.FieldNodeRenderer`. Fase 4: edição de nome e valor pelas propriedades (Ctrl+Enter). |
-| RF26 Criar referências | ⏳ Fase 3 | `model.edges.ObjectReferenceEdge`, `model.rules.ObjectDiagramRules` |
+| RF26 Criar referências | ✅ Implementado | `model.edges.ObjectReferenceEdge`; `model.builder.DiagramBuilder.createEdge(...)` (início na parte Value, destino em campo convertido para o objeto); `model.BoundsCalculator.getConnectionBounds(Node)`; `render.nodes.FieldNodeRenderer.getValueBounds(FieldNode)`; `model.rules.ObjectDiagramRules.checkEdge(...)`; `layout.EdgePathCalculator.referencePath(...)` |
 
 ### 4.7 Diagrama de sequência
 
@@ -292,10 +318,10 @@ Caminhos abreviados: `app` = `br.uefs.umleditor.app`, `model` = `br.uefs.umledit
 
 | Requisito | Situação | Classes e métodos |
 |---|---|---|
-| RF32 Seleção | ✅ Implementado | `ui.SelectionModel.set(Node)`, `toggle(Node)`, `setAll(...)`, `addAll(...)`, `clear()`; `ui.CanvasController.startSelection(Point, boolean)` (clique e Ctrl+clique), `mouseDragged(MouseEvent)` (laço); `model.builder.DiagramBuilder.findNodesInside(Rectangle)`; `ui.DiagramCanvas.setLasso(Rectangle)`; `render.DiagramRenderer.draw(...)` (marcadores de seleção) |
-| RF33 Selecionar tudo | ✅ Implementado | `app.MainWindow.createEditMenu()` (Select All, Ctrl+A); `ui.DiagramTab.selectAll()`; `model.Diagram.getAllNodes()`. As arestas passam a ser incluídas quando existirem (Fase 3). |
+| RF32 Seleção | ✅ Implementado | `ui.SelectionModel.set(DiagramElement)`, `toggle(DiagramElement)`, `setAll(...)`, `addAll(...)`, `clear()`; `ui.CanvasController.startSelection(Point, boolean)` (clique e Ctrl+clique), `mouseDragged(MouseEvent)` (laço); `model.builder.DiagramBuilder.findElementAt(Point)`, `findElementsInside(Rectangle)`; `layout.EdgePathCalculator.contains(Edge, Point)`; `ui.DiagramCanvas.setLasso(Rectangle)`; `render.DiagramRenderer.draw(...)` (marcadores de seleção) |
+| RF33 Selecionar tudo | ✅ Implementado | `app.MainWindow.createEditMenu()` (Select All, Ctrl+A); `ui.DiagramTab.selectAll()`; `model.builder.DiagramBuilder.getAllElements()` (nós e arestas); `model.builder.DiagramBuilder.movableNodes(...)` (mover a seleção inteira) |
 | RF34 Recortar, copiar e colar | ⏳ Fase 6 | `ui.ElementClipboard`, `model.builder.DiagramBuilder` |
-| RF35 Excluir elementos | ✅ Implementado | `app.MainWindow.createEditMenu()` (Delete, tecla Delete); `ui.DiagramTab.deleteSelection()`; `model.builder.DiagramBuilder.removeNodes(Collection<Node>)`, `topmostNodes(Collection<Node>)`; `command.RemoveNodeOperation`, `command.CompoundOperation` |
+| RF35 Excluir elementos | ✅ Implementado | `app.MainWindow.createEditMenu()` (Delete, tecla Delete); `ui.DiagramTab.deleteSelection()`; `model.builder.DiagramBuilder.removeElements(...)`, `topmostNodes(...)`; `command.RemoveEdgeOperation`, `command.RemoveNodeOperation`, `command.CompoundOperation` |
 
 ### 4.9 Visualização e interface
 
@@ -311,7 +337,7 @@ Caminhos abreviados: `app` = `br.uefs.umleditor.app`, `model` = `br.uefs.umledit
 
 | Requisito | Situação | Classes e métodos |
 |---|---|---|
-| RF41 Exibir notificações | ✅ Implementado | `ui.NotificationArea.showError(String)`, `showConfirmation(String)`, `show(String, String)`; posicionamento em `app.MainWindow` (`StackPane` no canto inferior esquerdo); classes `notification-error` e `notification-confirmation` em `base.css`. Hoje só confirmações são emitidas; os erros passam a ser emitidos a partir da Fase 3. |
+| RF41 Exibir notificações | ✅ Implementado | `ui.NotificationArea.showError(String)`, `showConfirmation(String)`, `show(String, String)`; posicionamento em `app.MainWindow` (`StackPane` no canto inferior esquerdo); `ui.DiagramTab.reportError(String)`; classes `notification-error` e `notification-confirmation` em `base.css` |
 | RF42 Duração das notificações | ✅ Implementado | `ui.dialogs.NotificationDurationDialog`; `app.MainWindow.editNotificationDuration()`; `app.UserPreferences.notificationDurationProperty()`, `DEFAULT_NOTIFICATION_DURATION`, `MAX_NOTIFICATION_DURATION`; `ui.NotificationArea.show(...)` (o valor 0 desativa as notificações) |
 
 ### 4.11 Requisitos não funcionais
@@ -320,4 +346,4 @@ Caminhos abreviados: `app` = `br.uefs.umleditor.app`, `model` = `br.uefs.umledit
 |---|---|---|
 | RNF01 Desempenho | ✅ Implementado | `app.UserPreferences.getDefaultDiagramWidth()` e `getDefaultDiagramHeight()` (tamanho inicial proporcional à tela); `ui.DiagramCanvas.refresh()` (o canvas cobre só a área visível, não o diagrama inteiro) |
 | RNF02 Formato aberto | ⏳ Fase 6 | Formato documentado na seção 2 deste README; `persistence.DiagramSerializer`, `persistence.DiagramDeserializer` |
-| RNF03 Múltiplas formas de interação | 🟡 Parcial | Implementado: ferramentas por barra, atalho e menu de contexto (`ui.ToolPalette.selectTool(int)`, `ui.DiagramTab.handleToolShortcut(KeyEvent)`, `ui.ToolPalette.createContextMenu()`); zoom por menu e atalho (`app.MainWindow.createViewMenu()`); Select All e Delete por menu e teclado (`app.MainWindow.createEditMenu()`). Fases 3–6: propriedades por duplo clique/Ctrl+Enter/menu, cópia de imagem por menu/barra/Ctrl+B e as demais operações. |
+| RNF03 Múltiplas formas de interação | 🟡 Parcial | Implementado: ferramentas por barra, atalho e menu de contexto (`ui.ToolPalette.selectTool(int)`, `ui.DiagramTab.handleToolShortcut(KeyEvent)`, `ui.ToolPalette.createContextMenu()`); zoom por menu e atalho (`app.MainWindow.createViewMenu()`); Select All e Delete por menu e teclado (`app.MainWindow.createEditMenu()`); seleção de nós e arestas por clique e por laço (`ui.CanvasController`). Fases 4–6: propriedades por duplo clique/Ctrl+Enter/menu, cópia de imagem por menu/barra/Ctrl+B e as demais operações. |
