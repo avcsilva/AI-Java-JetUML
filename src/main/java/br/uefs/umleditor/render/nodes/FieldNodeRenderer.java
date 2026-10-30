@@ -28,6 +28,16 @@ public class FieldNodeRenderer extends NodeRenderer<FieldNode> {
                 TextStyle.PLAIN).width() + 2 * PADDING, context().lineHeight(TextStyle.PLAIN));
     }
 
+    /**
+     * @return the value part of the field row, where references start (RF26)
+     */
+    public Rectangle getValueBounds(FieldNode node) {
+        Rectangle row = getBounds(node);
+        double nameWidth = measure(node.getName() + " =", TextStyle.PLAIN).width();
+        double x = Math.min(row.maxX(), row.x() + PADDING + nameWidth);
+        return new Rectangle(x, row.y(), row.maxX() - x, row.height());
+    }
+
     @Override
     public void draw(FieldNode node, GraphicsAdapter g) {
         drawText(g, ObjectNodeRenderer.fieldText(node), TextStyle.PLAIN, getBounds(node), false, true);

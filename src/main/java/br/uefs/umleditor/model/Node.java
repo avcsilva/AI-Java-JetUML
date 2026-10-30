@@ -7,7 +7,7 @@ import java.util.List;
  * in absolute diagram coordinates. The bounds themselves depend on the text
  * and font, so they are computed by a {@link BoundsCalculator}.
  */
-public abstract class Node {
+public abstract class Node implements DiagramElement {
 
     private double x;
     private double y;

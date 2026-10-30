@@ -5,9 +5,13 @@ import java.util.HashMap;
 import java.util.List;
 import java.util.Map;
 
+import br.uefs.umleditor.geom.Point;
 import br.uefs.umleditor.geom.Rectangle;
+import br.uefs.umleditor.layout.EdgePathCalculator;
 import br.uefs.umleditor.model.BoundsCalculator;
 import br.uefs.umleditor.model.Diagram;
+import br.uefs.umleditor.model.DiagramElement;
+import br.uefs.umleditor.model.Edge;
 import br.uefs.umleditor.model.Node;
 import br.uefs.umleditor.model.nodes.ActorNode;
 import br.uefs.umleditor.model.nodes.ClassNode;
@@ -20,6 +24,7 @@ import br.uefs.umleditor.model.nodes.NoteNode;
 import br.uefs.umleditor.model.nodes.ObjectNode;
 import br.uefs.umleditor.model.nodes.PackageDescriptionNode;
 import br.uefs.umleditor.model.nodes.PackageNode;
+import br.uefs.umleditor.model.nodes.PointNode;
 import br.uefs.umleditor.model.nodes.StateNode;
 import br.uefs.umleditor.model.nodes.UseCaseNode;
 import br.uefs.umleditor.render.nodes.ClassNodeRenderer;
@@ -29,12 +34,13 @@ import br.uefs.umleditor.render.nodes.NodeRenderer;
 import br.uefs.umleditor.render.nodes.NoteNodeRenderer;
 import br.uefs.umleditor.render.nodes.ObjectNodeRenderer;
 import br.uefs.umleditor.render.nodes.PackageNodeRenderer;
+import br.uefs.umleditor.render.nodes.PointNodeRenderer;
 import br.uefs.umleditor.render.nodes.StateNodeRenderer;
 import br.uefs.umleditor.render.nodes.UseCaseNodeRenderer;
 
 /**
  * Draws a whole diagram and computes the bounds of its nodes, delegating
- * each node type to its renderer.
+ * each node type to its renderer. Edges are drawn over the nodes.
  */
 public class DiagramRenderer implements BoundsCalculator {
 
@@ -42,6 +48,8 @@ public class DiagramRenderer implements BoundsCalculator {
 
     private final RenderContext context;
     private final Map<Class<? extends Node>, NodeRenderer<?>> renderers = new HashMap<>();
+    private final FieldNodeRenderer fieldRenderer;
+    private final EdgeRenderer edgeRenderer;
 
     public DiagramRenderer(RenderContext context) {
         this.context = context;
@@ -59,10 +67,13 @@ public class DiagramRenderer implements BoundsCalculator {
         renderers.put(InitialStateNode.class, stateRenderer);
         renderers.put(FinalStateNode.class, stateRenderer);
         renderers.put(ObjectNode.class, objectRenderer);
-        renderers.put(FieldNode.class, new FieldNodeRenderer(this, objectRenderer));
+        fieldRenderer = new FieldNodeRenderer(this, objectRenderer);
+        renderers.put(FieldNode.class, fieldRenderer);
         renderers.put(ActorNode.class, useCaseRenderer);
         renderers.put(UseCaseNode.class, useCaseRenderer);
         renderers.put(ImplicitParameterNode.class, new ImplicitParameterNodeRenderer(this));
+        renderers.put(PointNode.class, new PointNodeRenderer(this));
+        edgeRenderer = new EdgeRenderer(context);
     }
 
     public RenderContext getContext() {
@@ -83,6 +94,11 @@ public class DiagramRenderer implements BoundsCalculator {
         return rendererFor(node).getBounds(node);
     }
 
+    @Override
+    public Rectangle getConnectionBounds(Node node) {
+        return node instanceof FieldNode field ? fieldRenderer.getValueBounds(field) : getBounds(node);
+    }
+
     /**
      * Updates the stored position of nodes whose position derives from their
      * children or parent (packages with children and fields), so that the
@@ -100,27 +116,36 @@ public class DiagramRenderer implements BoundsCalculator {
     }
 
     /**
-     * Draws all nodes, parents before children, then marks the selected elements.
+     * Draws all nodes, parents before children, then the edges, then marks the
+     * selected elements: the corners of selected nodes and the ends of selected edges.
      */
-    public void draw(Diagram diagram, GraphicsAdapter g, Collection<Node> selection) {
+    public void draw(Diagram diagram, GraphicsAdapter g, Collection<DiagramElement> selection) {
         layout(diagram);
         for (Node node : diagram.getAllNodes()) {
             rendererFor(node).draw(node, g);
         }
-        for (Node node : selection) {
-            drawSelectionHandles(getBounds(node), g);
+        EdgePathCalculator paths = new EdgePathCalculator(diagram, this);
+        for (Edge edge : diagram.getEdges()) {
+            edgeRenderer.draw(edge, paths.getPath(edge), g);
+        }
+        for (DiagramElement element : selection) {
+            if (element instanceof Node node) {
+                Rectangle bounds = getBounds(node);
+                drawHandle(g, bounds.x(), bounds.y());
+                drawHandle(g, bounds.maxX(), bounds.y());
+                drawHandle(g, bounds.x(), bounds.maxY());
+                drawHandle(g, bounds.maxX(), bounds.maxY());
+            } else if (element instanceof Edge edge) {
+                List<Point> path = paths.getPath(edge);
+                drawHandle(g, path.get(0).x(), path.get(0).y());
+                drawHandle(g, path.get(path.size() - 1).x(), path.get(path.size() - 1).y());
+            }
         }
     }
 
-    private void drawSelectionHandles(Rectangle bounds, GraphicsAdapter g) {
+    private void drawHandle(GraphicsAdapter g, double x, double y) {
         double half = HANDLE_SIZE / 2;
-        double[] xs = {bounds.x(), bounds.maxX()};
-        double[] ys = {bounds.y(), bounds.maxY()};
-        for (double x : xs) {
-            for (double y : ys) {
-                g.drawRectangle(new Rectangle(x - half, y - half, HANDLE_SIZE, HANDLE_SIZE),
-                        context.getTheme().getSelection(), null);
-            }
-        }
+        g.drawRectangle(new Rectangle(x - half, y - half, HANDLE_SIZE, HANDLE_SIZE),
+                context.getTheme().getSelection(), null);
     }
 }

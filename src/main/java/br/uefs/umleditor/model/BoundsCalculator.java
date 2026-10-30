@@ -9,4 +9,12 @@ import br.uefs.umleditor.geom.Rectangle;
 public interface BoundsCalculator {
 
     Rectangle getBounds(Node node);
+
+    /**
+     * @return the part of the node where edges that need a specific starting
+     *         area begin, such as the value part of a field (RF26)
+     */
+    default Rectangle getConnectionBounds(Node node) {
+        return getBounds(node);
+    }
 }

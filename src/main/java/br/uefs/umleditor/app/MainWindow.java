@@ -156,7 +156,7 @@ public class MainWindow {
         Diagram diagram = new Diagram(type, preferences.getDiagramWidth(), preferences.getDiagramHeight());
         RenderContext renderContext = new RenderContext(currentTheme(), preferences.fontSettingsProperty().get());
         DiagramTab tab = new DiagramTab(diagram, type.getDisplayName(), renderContext,
-                preferences.showGridProperty().get());
+                preferences.showGridProperty().get(), notificationArea::showError);
         tab.getToolPalette().setShowToolHint(preferences.showToolHintProperty().get());
         tab.getToolPalette().setVerboseTooltips(preferences.verboseTooltipsProperty().get());
         tabPane.getTabs().remove(welcomeTab);

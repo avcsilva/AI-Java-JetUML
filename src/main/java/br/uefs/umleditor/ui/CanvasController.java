@@ -8,9 +8,12 @@ import br.uefs.umleditor.command.MoveNodesOperation;
 import br.uefs.umleditor.geom.Point;
 import br.uefs.umleditor.geom.Rectangle;
 import br.uefs.umleditor.layout.GridSnap;
+import br.uefs.umleditor.model.DiagramElement;
+import br.uefs.umleditor.model.Edge;
 import br.uefs.umleditor.model.Node;
 import br.uefs.umleditor.model.ToolType;
 import br.uefs.umleditor.model.builder.DiagramBuilder;
+import br.uefs.umleditor.model.edges.EdgeFactory;
 import br.uefs.umleditor.model.nodes.NodeFactory;
 import javafx.scene.input.KeyCode;
 import javafx.scene.input.KeyEvent;
@@ -19,10 +22,14 @@ import javafx.scene.input.MouseEvent;
 
 /**
  * Handles mouse and keyboard gestures on the drawing area: node creation
- * (RF11), selection by click, Ctrl+click and lasso (RF32), moving nodes with
- * grid snapping (RF36) and attaching or detaching nodes with Shift (RF15).
+ * (RF11), edge creation with a rubber band line (RF16), selection by click,
+ * Ctrl+click and lasso (RF32), moving nodes with grid snapping (RF36) and
+ * attaching or detaching nodes with Shift (RF15).
  */
 public class CanvasController {
+
+    /** Shorter drags are clicks, which do not create edges. */
+    private static final double MIN_EDGE_DRAG = 3;
 
     private final DiagramTab tab;
     private final DiagramBuilder builder;
@@ -37,7 +44,10 @@ public class CanvasController {
     private double movedY;
 
     private Point lassoStart;
-    private List<Node> selectionBeforeLasso = List.of();
+    private List<DiagramElement> selectionBeforeLasso = List.of();
+
+    private Edge newEdge;
+    private Point edgeStart;
 
     private boolean shiftDown;
 
@@ -66,6 +76,7 @@ public class CanvasController {
             startSelection(point, event.isShortcutDown());
         } else {
             NodeFactory.create(tool).ifPresent(node -> createNode(node, point));
+            EdgeFactory.create(tool).ifPresent(edge -> startEdge(edge, point));
         }
         canvas.refresh();
     }
@@ -77,8 +88,28 @@ public class CanvasController {
         });
     }
 
+    private void startEdge(Edge edge, Point point) {
+        if (builder.findNodeAt(point).isPresent()) {
+            newEdge = edge;
+            edgeStart = point;
+        }
+    }
+
+    private void finishEdge(Point point) {
+        if (Math.hypot(point.x() - edgeStart.x(), point.y() - edgeStart.y()) < MIN_EDGE_DRAG) {
+            return;
+        }
+        DiagramBuilder.EdgeCreation creation = builder.createEdge(newEdge, edgeStart, point);
+        if (creation.validation().isValid()) {
+            tab.perform(creation.operation());
+            selection.set(newEdge);
+        } else if (creation.validation().isError()) {
+            tab.reportError(creation.validation().message());
+        }
+    }
+
     private void startSelection(Point point, boolean toggle) {
-        Optional<Node> hit = builder.findNodeAt(point);
+        Optional<DiagramElement> hit = builder.findElementAt(point);
         if (hit.isEmpty()) {
             if (!toggle) {
                 selection.clear();
@@ -87,18 +118,18 @@ public class CanvasController {
             selectionBeforeLasso = selection.getSelected();
             return;
         }
-        Node node = hit.get();
+        DiagramElement element = hit.get();
         if (toggle) {
-            selection.toggle(node);
+            selection.toggle(element);
             return;
         }
-        if (!selection.contains(node)) {
-            selection.set(node);
+        if (!selection.contains(element)) {
+            selection.set(element);
         }
         draggedNodes = DiagramBuilder.movableNodes(selection.getSelected());
         if (!draggedNodes.isEmpty()) {
             dragStart = point;
-            Node anchor = draggedNodes.contains(node) ? node : draggedNodes.get(0);
+            Node anchor = element instanceof Node node && draggedNodes.contains(node) ? node : draggedNodes.get(0);
             anchorStart = new Point(anchor.getX(), anchor.getY());
             draggedNodes = moveAnchorFirst(draggedNodes, anchor);
             movedX = 0;
@@ -124,7 +155,9 @@ public class CanvasController {
             Rectangle region = Rectangle.fromCorners(lassoStart, point);
             canvas.setLasso(region);
             selection.setAll(selectionBeforeLasso);
-            selection.addAll(builder.findNodesInside(region));
+            selection.addAll(builder.findElementsInside(region));
+        } else if (newEdge != null) {
+            canvas.setRubberBand(edgeStart, point);
         }
         canvas.refresh();
     }
@@ -160,10 +193,15 @@ public class CanvasController {
         if (dragStart != null && (movedX != 0 || movedY != 0)) {
             tab.record(new MoveNodesOperation(draggedNodes, movedX, movedY));
         }
+        if (newEdge != null) {
+            finishEdge(canvas.toDiagramPoint(event));
+        }
         dragStart = null;
         draggedNodes = List.of();
         lassoStart = null;
+        newEdge = null;
         canvas.setLasso(null);
+        canvas.setRubberBand(null, null);
         canvas.refresh();
     }
 

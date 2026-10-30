@@ -94,7 +94,7 @@ class DiagramBuilderTest {
         ClassNode child = (ClassNode) create(new ClassNode(), 50, 50);
         ClassNode other = (ClassNode) create(new ClassNode(), 500, 500);
 
-        DiagramOperation removal = builder.removeNodes(List.of(child, pkg)).orElseThrow();
+        DiagramOperation removal = builder.removeElements(List.of(child, pkg)).orElseThrow();
         removal.execute();
         assertEquals(List.of(other), diagram.getRootNodes());
 
@@ -129,7 +129,7 @@ class DiagramBuilderTest {
     void lassoSelectsNodesEntirelyInside() {
         ClassNode inside = (ClassNode) create(new ClassNode(), 10, 10);
         create(new ClassNode(), 150, 10);
-        assertEquals(List.of(inside), builder.findNodesInside(new Rectangle(0, 0, 200, 100)));
+        assertEquals(List.of(inside), builder.findElementsInside(new Rectangle(0, 0, 200, 100)));
     }
 
     @Test

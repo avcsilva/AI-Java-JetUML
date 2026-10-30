@@ -5,16 +5,16 @@ import java.util.LinkedHashSet;
 import java.util.List;
 import java.util.Set;
 
-import br.uefs.umleditor.model.Node;
+import br.uefs.umleditor.model.DiagramElement;
 
 /**
- * The elements currently selected in a diagram (RF32, RF33).
+ * The elements, nodes and edges, currently selected in a diagram (RF32, RF33).
  */
 public class SelectionModel {
 
-    private final Set<Node> selected = new LinkedHashSet<>();
+    private final Set<DiagramElement> selected = new LinkedHashSet<>();
 
-    public List<Node> getSelected() {
+    public List<DiagramElement> getSelected() {
         return List.copyOf(selected);
     }
 
@@ -22,8 +22,8 @@ public class SelectionModel {
         return selected.isEmpty();
     }
 
-    public boolean contains(Node node) {
-        return selected.contains(node);
+    public boolean contains(DiagramElement element) {
+        return selected.contains(element);
     }
 
     public void clear() {
@@ -33,26 +33,26 @@ public class SelectionModel {
     /**
      * Replaces the selection with a single element.
      */
-    public void set(Node node) {
+    public void set(DiagramElement element) {
         selected.clear();
-        selected.add(node);
+        selected.add(element);
     }
 
-    public void setAll(Collection<Node> nodes) {
+    public void setAll(Collection<? extends DiagramElement> elements) {
         selected.clear();
-        selected.addAll(nodes);
+        selected.addAll(elements);
     }
 
-    public void addAll(Collection<Node> nodes) {
-        selected.addAll(nodes);
+    public void addAll(Collection<? extends DiagramElement> elements) {
+        selected.addAll(elements);
     }
 
     /**
      * Adds the element if it is not selected, or removes it otherwise (Ctrl+click).
      */
-    public void toggle(Node node) {
-        if (!selected.remove(node)) {
-            selected.add(node);
+    public void toggle(DiagramElement element) {
+        if (!selected.remove(element)) {
+            selected.add(element);
         }
     }
 }

@@ -7,7 +7,8 @@ import java.util.Objects;
 
 /**
  * A UML diagram of a given type with a fixed size in pixels (RF38).
- * It holds the root nodes; child nodes are reached through their parents.
+ * It holds the root nodes, whose children are reached through their parents,
+ * and the edges between nodes.
  */
 public class Diagram {
 
@@ -16,6 +17,7 @@ public class Diagram {
 
     private final DiagramType type;
     private final List<Node> rootNodes = new ArrayList<>();
+    private final List<Edge> edges = new ArrayList<>();
     private int width;
     private int height;
 
@@ -87,6 +89,33 @@ public class Diagram {
             collect(root, result);
         }
         return result;
+    }
+
+    public List<Edge> getEdges() {
+        return Collections.unmodifiableList(edges);
+    }
+
+    public void addEdge(Edge edge) {
+        addEdge(edges.size(), edge);
+    }
+
+    public void addEdge(int index, Edge edge) {
+        if (edge.getStart() == null || edge.getEnd() == null) {
+            throw new IllegalArgumentException("An edge must be connected before being added");
+        }
+        edges.add(index, edge);
+    }
+
+    /**
+     * @return the position the edge had among the edges
+     */
+    public int removeEdge(Edge edge) {
+        int index = edges.indexOf(edge);
+        if (index < 0) {
+            throw new IllegalArgumentException("Not an edge of this diagram");
+        }
+        edges.remove(index);
+        return index;
     }
 
     private static void collect(Node node, List<Node> result) {

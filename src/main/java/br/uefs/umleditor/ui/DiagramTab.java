@@ -1,5 +1,7 @@
 package br.uefs.umleditor.ui;
 
+import java.util.function.Consumer;
+
 import br.uefs.umleditor.command.DiagramOperation;
 import br.uefs.umleditor.command.UndoManager;
 import br.uefs.umleditor.model.Diagram;
@@ -28,11 +30,17 @@ public class DiagramTab extends Tab {
     private final UndoManager undoManager = new UndoManager();
     private final ToolPalette toolPalette;
     private final DiagramCanvas diagramCanvas;
+    private final Consumer<String> errorReporter;
     private ContextMenu contextMenu;
 
-    public DiagramTab(Diagram diagram, String title, RenderContext renderContext, boolean showGrid) {
+    /**
+     * @param errorReporter shows error notifications to the user (RF41)
+     */
+    public DiagramTab(Diagram diagram, String title, RenderContext renderContext, boolean showGrid,
+                      Consumer<String> errorReporter) {
         super(title);
         this.diagram = diagram;
+        this.errorReporter = errorReporter;
         this.renderContext = renderContext;
         DiagramRenderer renderer = new DiagramRenderer(renderContext);
         this.builder = new DiagramBuilder(diagram, renderer);
@@ -96,7 +104,7 @@ public class DiagramTab extends Tab {
      * Edit > Select All: selects every element of the diagram (RF33).
      */
     public void selectAll() {
-        selection.setAll(diagram.getAllNodes());
+        selection.setAll(builder.getAllElements());
         diagramCanvas.refresh();
     }
 
@@ -104,9 +112,16 @@ public class DiagramTab extends Tab {
      * Edit > Delete: removes the selected elements (RF35).
      */
     public void deleteSelection() {
-        builder.removeNodes(selection.getSelected()).ifPresent(this::perform);
+        builder.removeElements(selection.getSelected()).ifPresent(this::perform);
         selection.clear();
         diagramCanvas.refresh();
+    }
+
+    /**
+     * Shows an error notification, such as an invalid connection (RF18).
+     */
+    public void reportError(String message) {
+        errorReporter.accept(message);
     }
 
     /**

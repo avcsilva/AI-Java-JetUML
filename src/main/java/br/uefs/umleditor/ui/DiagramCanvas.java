@@ -36,6 +36,8 @@ public class DiagramCanvas extends ScrollPane {
     private int zoomLevel = NORMAL_ZOOM;
     private boolean showGrid;
     private Rectangle lasso;
+    private Point rubberBandStart;
+    private Point rubberBandEnd;
 
     public DiagramCanvas(Diagram diagram, DiagramRenderer renderer, SelectionModel selection, boolean showGrid) {
         this.diagram = diagram;
@@ -72,6 +74,14 @@ public class DiagramCanvas extends ScrollPane {
      */
     public void setLasso(Rectangle lasso) {
         this.lasso = lasso;
+    }
+
+    /**
+     * Shows the elastic line of an edge being created (RF16), or hides it when the points are null.
+     */
+    public void setRubberBand(Point start, Point end) {
+        rubberBandStart = start;
+        rubberBandEnd = end;
     }
 
     public double getZoom() {
@@ -162,6 +172,12 @@ public class DiagramCanvas extends ScrollPane {
             gc.setGlobalAlpha(1);
             gc.setStroke(theme.getSelection());
             gc.strokeRect(lasso.x(), lasso.y(), lasso.width(), lasso.height());
+        }
+        if (rubberBandStart != null && rubberBandEnd != null) {
+            gc.setStroke(theme.getSelection());
+            gc.setLineDashes(4, 3);
+            gc.strokeLine(rubberBandStart.x(), rubberBandStart.y(), rubberBandEnd.x(), rubberBandEnd.y());
+            gc.setLineDashes();
         }
     }
 
