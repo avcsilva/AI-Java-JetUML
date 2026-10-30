@@ -49,7 +49,7 @@ public class DiagramTab extends Tab {
         this.errorReporter = errorReporter;
         this.renderContext = renderContext;
         DiagramRenderer renderer = new DiagramRenderer(renderContext);
-        this.builder = new DiagramBuilder(diagram, renderer);
+        this.builder = DiagramBuilder.forDiagram(diagram, renderer);
         this.toolPalette = new ToolPalette(diagram.getType(), renderContext.getTheme(), this::runActionTool);
         this.diagramCanvas = new DiagramCanvas(diagram, renderer, selection, showGrid);
         new CanvasController(this, builder, selection, diagramCanvas, toolPalette);

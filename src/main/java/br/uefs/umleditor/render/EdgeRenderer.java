@@ -7,6 +7,7 @@ import br.uefs.umleditor.geom.Point;
 import br.uefs.umleditor.layout.EdgePathCalculator;
 import br.uefs.umleditor.model.Edge;
 import br.uefs.umleditor.model.edges.AggregationEdge;
+import br.uefs.umleditor.model.edges.CallEdge;
 import br.uefs.umleditor.model.edges.ClassRelationshipEdge;
 import br.uefs.umleditor.model.edges.DependencyEdge;
 import br.uefs.umleditor.model.edges.Directionality;
@@ -14,6 +15,7 @@ import br.uefs.umleditor.model.edges.GeneralizationEdge;
 import br.uefs.umleditor.model.edges.LabeledEdge;
 import br.uefs.umleditor.model.edges.NoteEdge;
 import br.uefs.umleditor.model.edges.ObjectReferenceEdge;
+import br.uefs.umleditor.model.edges.ReturnEdge;
 import br.uefs.umleditor.model.edges.StateTransitionEdge;
 import br.uefs.umleditor.model.edges.UseCaseDependencyEdge;
 import br.uefs.umleditor.model.edges.UseCaseGeneralizationEdge;
@@ -66,6 +68,14 @@ public class EdgeRenderer {
         }
         if (edge instanceof NoteEdge) {
             return Appearance.of(LineStyle.DASHED, ArrowHead.NONE, ArrowHead.NONE);
+        }
+        if (edge instanceof CallEdge call) {
+            return new Appearance(LineStyle.SOLID, ArrowHead.NONE, ArrowHead.FILLED_TRIANGLE, "",
+                    call.getMiddleLabel(), "");
+        }
+        if (edge instanceof ReturnEdge returnEdge) {
+            return new Appearance(LineStyle.DASHED, ArrowHead.NONE, ArrowHead.OPEN, "", returnEdge.getMiddleLabel(),
+                    "");
         }
         if (edge instanceof StateTransitionEdge transition) {
             return new Appearance(LineStyle.SOLID, ArrowHead.NONE, ArrowHead.OPEN, "", transition.getMiddleLabel(), "");

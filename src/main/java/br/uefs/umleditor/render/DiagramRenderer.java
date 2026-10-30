@@ -8,12 +8,15 @@ import java.util.Map;
 import br.uefs.umleditor.geom.Point;
 import br.uefs.umleditor.geom.Rectangle;
 import br.uefs.umleditor.layout.EdgePathCalculator;
+import br.uefs.umleditor.layout.SequenceLayout;
 import br.uefs.umleditor.model.BoundsCalculator;
 import br.uefs.umleditor.model.Diagram;
+import br.uefs.umleditor.model.DiagramType;
 import br.uefs.umleditor.model.DiagramElement;
 import br.uefs.umleditor.model.Edge;
 import br.uefs.umleditor.model.Node;
 import br.uefs.umleditor.model.nodes.ActorNode;
+import br.uefs.umleditor.model.nodes.CallNode;
 import br.uefs.umleditor.model.nodes.ClassNode;
 import br.uefs.umleditor.model.nodes.FieldNode;
 import br.uefs.umleditor.model.nodes.FinalStateNode;
@@ -27,6 +30,7 @@ import br.uefs.umleditor.model.nodes.PackageNode;
 import br.uefs.umleditor.model.nodes.PointNode;
 import br.uefs.umleditor.model.nodes.StateNode;
 import br.uefs.umleditor.model.nodes.UseCaseNode;
+import br.uefs.umleditor.render.nodes.CallNodeRenderer;
 import br.uefs.umleditor.render.nodes.ClassNodeRenderer;
 import br.uefs.umleditor.render.nodes.FieldNodeRenderer;
 import br.uefs.umleditor.render.nodes.ImplicitParameterNodeRenderer;
@@ -49,6 +53,7 @@ public class DiagramRenderer implements BoundsCalculator {
     private final RenderContext context;
     private final Map<Class<? extends Node>, NodeRenderer<?>> renderers = new HashMap<>();
     private final FieldNodeRenderer fieldRenderer;
+    private final ImplicitParameterNodeRenderer implicitParameterRenderer;
     private final EdgeRenderer edgeRenderer;
 
     public DiagramRenderer(RenderContext context) {
@@ -71,7 +76,9 @@ public class DiagramRenderer implements BoundsCalculator {
         renderers.put(FieldNode.class, fieldRenderer);
         renderers.put(ActorNode.class, useCaseRenderer);
         renderers.put(UseCaseNode.class, useCaseRenderer);
-        renderers.put(ImplicitParameterNode.class, new ImplicitParameterNodeRenderer(this));
+        implicitParameterRenderer = new ImplicitParameterNodeRenderer(this);
+        renderers.put(ImplicitParameterNode.class, implicitParameterRenderer);
+        renderers.put(CallNode.class, new CallNodeRenderer(this));
         renderers.put(PointNode.class, new PointNodeRenderer(this));
         edgeRenderer = new EdgeRenderer(context);
     }
@@ -96,7 +103,13 @@ public class DiagramRenderer implements BoundsCalculator {
 
     @Override
     public Rectangle getConnectionBounds(Node node) {
-        return node instanceof FieldNode field ? fieldRenderer.getValueBounds(field) : getBounds(node);
+        if (node instanceof FieldNode field) {
+            return fieldRenderer.getValueBounds(field);
+        }
+        if (node instanceof ImplicitParameterNode lifeline) {
+            return implicitParameterRenderer.getBoxBounds(lifeline);
+        }
+        return getBounds(node);
     }
 
     /**
@@ -105,6 +118,10 @@ public class DiagramRenderer implements BoundsCalculator {
      * model matches what is drawn.
      */
     public void layout(Diagram diagram) {
+        if (diagram.getType() == DiagramType.SEQUENCE) {
+            new SequenceLayout(diagram, lifeline -> implicitParameterRenderer.getBoxBounds(lifeline).height(),
+                    lifeline -> implicitParameterRenderer.getBoxBounds(lifeline).center().x()).apply();
+        }
         List<Node> nodes = diagram.getAllNodes();
         for (int i = nodes.size() - 1; i >= 0; i--) {
             Node node = nodes.get(i);

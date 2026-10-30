@@ -32,6 +32,8 @@ public final class EdgeFactory {
             case INCLUDE -> new UseCaseDependencyEdge(UseCaseDependencyEdge.Type.INCLUDE);
             case EXTEND -> new UseCaseDependencyEdge(UseCaseDependencyEdge.Type.EXTEND);
             case GENERALIZATION -> new UseCaseGeneralizationEdge();
+            case CALL -> new CallEdge();
+            case RETURN -> new ReturnEdge();
             default -> null;
         };
         return Optional.ofNullable(edge);

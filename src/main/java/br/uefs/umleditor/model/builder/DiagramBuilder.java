@@ -20,6 +20,7 @@ import br.uefs.umleditor.layout.EdgePathCalculator;
 import br.uefs.umleditor.layout.GridSnap;
 import br.uefs.umleditor.model.BoundsCalculator;
 import br.uefs.umleditor.model.Diagram;
+import br.uefs.umleditor.model.DiagramType;
 import br.uefs.umleditor.model.DiagramElement;
 import br.uefs.umleditor.model.Edge;
 import br.uefs.umleditor.model.Node;
@@ -45,7 +46,7 @@ public class DiagramBuilder {
      */
     public record EdgeCreation(ValidationResult validation, DiagramOperation operation) {
 
-        static EdgeCreation rejected(ValidationResult validation) {
+        protected static EdgeCreation rejected(ValidationResult validation) {
             return new EdgeCreation(validation, null);
         }
     }
@@ -60,6 +61,23 @@ public class DiagramBuilder {
         this.bounds = bounds;
         this.rules = DiagramRules.forType(diagram.getType());
         this.paths = new EdgePathCalculator(diagram, bounds);
+    }
+
+    /**
+     * @return the builder for the type of the diagram
+     */
+    public static DiagramBuilder forDiagram(Diagram diagram, BoundsCalculator bounds) {
+        return diagram.getType() == DiagramType.SEQUENCE
+                ? new SequenceDiagramBuilder(diagram, bounds)
+                : new DiagramBuilder(diagram, bounds);
+    }
+
+    protected BoundsCalculator bounds() {
+        return bounds;
+    }
+
+    protected DiagramRules rules() {
+        return rules;
     }
 
     public Diagram getDiagram() {

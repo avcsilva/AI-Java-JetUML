@@ -9,7 +9,9 @@ import br.uefs.umleditor.model.BoundsCalculator;
 import br.uefs.umleditor.model.Diagram;
 import br.uefs.umleditor.model.Edge;
 import br.uefs.umleditor.model.Node;
+import br.uefs.umleditor.model.edges.CallEdge;
 import br.uefs.umleditor.model.edges.ObjectReferenceEdge;
+import br.uefs.umleditor.model.edges.ReturnEdge;
 import br.uefs.umleditor.model.edges.StateTransitionEdge;
 import br.uefs.umleditor.model.nodes.FieldNode;
 import br.uefs.umleditor.model.nodes.FinalStateNode;
@@ -27,6 +29,10 @@ import br.uefs.umleditor.model.nodes.UseCaseNode;
  * State transitions between the same two states are drawn as arcs.</li>
  * <li>An edge from a node to itself is a loop on one of the corners.</li>
  * <li>A reference starts at the side of the value part of its field.</li>
+ * <li>Calls and returns are horizontal: a call leaves the caller at the top
+ * of the callee activation, or at the middle of the box of the object it
+ * creates; a return leaves the callee at its bottom. Calls and returns on the
+ * same lifeline are drawn as small loops on the right side.</li>
  * </ul>
  */
 public class EdgePathCalculator {
@@ -48,6 +54,12 @@ public class EdgePathCalculator {
      * @return the points of the edge path, from the start node to the end node
      */
     public List<Point> getPath(Edge edge) {
+        if (edge instanceof CallEdge call) {
+            return callPath(call);
+        }
+        if (edge instanceof ReturnEdge) {
+            return returnPath(edge);
+        }
         if (edge instanceof ObjectReferenceEdge && edge.getStart() instanceof FieldNode field) {
             return referencePath(field, edge.getEnd());
         }
@@ -150,6 +162,44 @@ public class EdgePathCalculator {
         boolean toLeft = targetBounds.center().x() < row.center().x();
         Point start = new Point(toLeft ? row.x() : row.maxX(), y);
         return List.of(start, exitPoint(target, targetBounds.center(), start));
+    }
+
+    private List<Point> callPath(CallEdge call) {
+        Rectangle caller = bounds.getBounds(call.getStart());
+        Rectangle callee = bounds.getBounds(call.getEnd());
+        if (call.isConstructorCall()) {
+            Rectangle box = bounds.getConnectionBounds(call.getEnd().getParent());
+            return horizontal(caller, box, box.center().y());
+        }
+        if (call.getStart().getParent() == call.getEnd().getParent()) {
+            double y = callee.y();
+            double outX = callee.maxX() + LOOP_SIZE;
+            return List.of(new Point(caller.maxX(), y), new Point(outX, y), new Point(outX, y + LOOP_SIZE / 2),
+                    new Point(callee.maxX(), y + LOOP_SIZE / 2));
+        }
+        return horizontal(caller, callee, callee.y());
+    }
+
+    private List<Point> returnPath(Edge edge) {
+        Rectangle callee = bounds.getBounds(edge.getStart());
+        Rectangle caller = bounds.getBounds(edge.getEnd());
+        double y = callee.maxY();
+        if (edge.getStart().getParent() == edge.getEnd().getParent()) {
+            double outX = callee.maxX() + LOOP_SIZE;
+            return List.of(new Point(callee.maxX(), y), new Point(outX, y), new Point(outX, y + LOOP_SIZE / 2),
+                    new Point(caller.maxX(), y + LOOP_SIZE / 2));
+        }
+        return horizontal(callee, caller, y);
+    }
+
+    /**
+     * @return a horizontal segment at height y between the facing sides of two areas
+     */
+    private static List<Point> horizontal(Rectangle from, Rectangle to, double y) {
+        if (to.center().x() >= from.center().x()) {
+            return List.of(new Point(from.maxX(), y), new Point(to.x(), y));
+        }
+        return List.of(new Point(from.x(), y), new Point(to.maxX(), y));
     }
 
     private Point center(Node node) {
