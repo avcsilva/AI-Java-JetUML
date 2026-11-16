@@ -1,0 +1,1 @@
+Crie um README.md com instruções de compilação e execução, a documentação do formato JSON dos arquivos de diagrama e uma tabela de rastreabilidade que associe cada requisito (RF01 a RF42, RNF01 a RNF03) às classes e métodos que o implementam. Não altere o código.
